@@ -1,54 +1,90 @@
 
 import { connectToDatabase } from "@/lib/mongodb";
 import { hash } from "bcrypt";
-import isValidEmail from "@/lib/isValidEmail";
+import emailValidator from "@/lib/emailValidator";
 import { NextRequest } from "next/server";
+
+const invalidUsernameInclusion = new Set( [
+	"admin",
+	"root",
+	"guest",
+	"user",
+] );
+
+type signupRequestBody = { email: string; password: string; username: string };
+
+//this is the reason for the non-null assert in TS
+if( !process.env.DB_USER_COLLECTION ) {
+	throw new Error( "Need to declare DB_USER_COLLECTION env variable" );
+}
 
 export async function POST( req: NextRequest ) {
 	//Getting email and password from body
-	// const { email, password, username } = req.body;
-	// console.log( req.body );
+	// eslint-disable-next-line prefer-const
+	let { email, password, username }: signupRequestBody = await req.json();
+
+	email = email.trim().toLowerCase();
+	username = username.trim();
+
+	console.log( email, password, username );
 	//Validate
-	// if( !email || !isValidEmail( email ) || !password  || !username ) {
-	// 	res.status( 422 ).json({ message: "Incorrect data format" });
-	// 	return;
-	// }
+	if( !email || typeof email !== "string" || !emailValidator.validate( email )) {
+		return new Response( JSON.stringify({ message: "Incorrect email format" }), {
+			status: 422,
+		});
+	}
+	if( emailValidator.isTempEmail( email )) {
+		return new Response( JSON.stringify({ message: "The domain provided is a known temp email" }), {
+			status: 422,
+		});
+	}
 
-	// if( typeof password === "object" || password.length < 8 ) {
-	// 	res.status( 422 ).json({ message: "Invalid password format" });
-	// 	return;
-	// }
+	if( !password || typeof password !== "string" || password.length < 8 ) {
+		return new Response( JSON.stringify({ message: "Invalid password format" }), {
+			status: 422,
+		});
+	}
 
-	// if( !process.env.DB_USER_COLLECTION ) {
-	// 	res.status( 500 ).json({ message: "Internal Server Error"  });
-	// 	throw new Error( "Define the DB_USER_COLLECTION environmental variable" );
-	// }
+	if( !username || typeof username !== "string" || username.length < 4 || username.length > 30 ) {
+		return new Response( JSON.stringify({ message: "Invalid username format" }), {
+			status: 422,
+		});
+	}
+
 	//Connect with database
-	// const { db } = await connectToDatabase();
-	// const userCollection = db
-	// 	.collection( process.env.DB_USER_COLLECTION );
+	const { db } = await connectToDatabase();
+	const userCollection = db
+		//check located on top of file to error if not set
+		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+		.collection( process.env.DB_USER_COLLECTION! );
 
-	// const checkExistingEmail = await userCollection.findOne({ email });
-	// if( checkExistingEmail ) {
-	// 	res.status( 422 ).json({ message: "Email already in use" });
-	// 	return;
-	// }
+	const checkExistingEmail = await userCollection.findOne({ email });
+	if( checkExistingEmail ) {
+		return new Response( JSON.stringify({ message: "Email already in use" }), {
+			status: 422,
+		});
+	}
 
-	// const checkExistingUsername = await userCollection.findOne({ username });
-	// if( checkExistingUsername ) {
-	// 	res.status( 422 ).json({ message: "Username already in use" });
-	// 	return;
-	// }
-	// //Hash password
-	// const status = await userCollection.insertOne({
-	// 	email,
-	// 	password: await hash( password, 12 ),
-	// 	username,
-	// });
+	const checkExistingUsername = await userCollection.findOne({ username });
+	if( checkExistingUsername ) {
+		return new Response( JSON.stringify({ message: "Username already in use" }), {
+			status: 422,
+		});
+	}
+
+	//Hash password
+	const status = await userCollection.insertOne({
+		email,
+		password: await hash( password, 12 ),
+		username,
+	});
 	//Send success response
-	console.log( req.body.username );
-	return new Response( req.body, {
-		status: 200,
+	console.log( "Add user successful" );
+	return new Response( JSON.stringify({ message: "Add user successful" }), {
+		status : 200,
+		headers: {
+			"Content-Type": "application/json",
+		},
 	});
 }
 //...status

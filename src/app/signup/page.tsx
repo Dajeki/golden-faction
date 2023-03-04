@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useState } from "react";
-import isValidEmail from "@/lib/isValidEmail";
+import emailValidator from "@/lib/emailValidator.js";
 
 export default function Signup() {
 	const [username, setUsername] = useState( "" );
@@ -13,28 +13,33 @@ export default function Signup() {
 		event.preventDefault();
 		const errors = [];
 
-		if( username.trim() === "" ) {
+		const usernameTrimmed = username.trim();
+		const emailTrimmed = email.trim();
+		const passwordTrimmed = password.trim();
+		const confirmPasswordTrimmed = confirmPassword.trim();
+
+		if( usernameTrimmed === "" ) {
 			errors.push( "Name is required" );
 		}
 
-		if( email.trim() === "" ) {
+		if( emailTrimmed === "" ) {
 			errors.push( "Email is required" );
 		}
-		else if( !isValidEmail( email.trim())) {
+		else if( !emailValidator.validate( emailTrimmed )) {
 			errors.push( "Invalid email format" );
 		}
 
-		if( password.trim() === "" ) {
+		if( passwordTrimmed === "" ) {
 			errors.push( "Password is required" );
 		}
-		else if( password.trim().length < 8 ) {
+		else if( passwordTrimmed.length < 8 ) {
 			errors.push( "Password must be at least 8 characters long" );
 		}
 
-		if( confirmPassword.trim() === "" ) {
+		if( confirmPasswordTrimmed  === "" ) {
 			errors.push( "Confirm password is required" );
 		}
-		else if( password.trim() !== confirmPassword.trim()) {
+		else if( passwordTrimmed !== confirmPasswordTrimmed ) {
 			errors.push( "Passwords do not match" );
 		}
 
@@ -50,16 +55,17 @@ export default function Signup() {
 				method : "POST",
 				headers: {
 					"Content-Type": "application/json",
+					Accept        : "application/json",
 				},
 				body: JSON.stringify({
 					username: username,
 					password: password,
 					email   : email,
 				}),
-				next: { revalidate: 0 },
+				cache: "no-cache",
 			})
 				.then( res => res.json())
-				.then( data => console.log( data.username, data.password, data.email ));
+				.then( data => console.log( data.message ));
 		}
 	}
 
