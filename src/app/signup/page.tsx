@@ -3,7 +3,7 @@ import { FormEvent, useState } from "react";
 import isValidEmail from "@/lib/isValidEmail";
 
 export default function Signup() {
-	const [name, setName] = useState( "" );
+	const [username, setUsername] = useState( "" );
 	const [email, setEmail] = useState( "" );
 	const [password, setPassword] = useState( "" );
 	const [confirmPassword, setConfirmPassword] = useState( "" );
@@ -13,7 +13,7 @@ export default function Signup() {
 		event.preventDefault();
 		const errors = [];
 
-		if( name.trim() === "" ) {
+		if( username.trim() === "" ) {
 			errors.push( "Name is required" );
 		}
 
@@ -42,9 +42,24 @@ export default function Signup() {
 
 		if( errors.length === 0 ) {
 			console.log( "Sent the request to the server" );
+
 			/*
 			* TODO: send data to server and Reroute to the servers response of either accepted or the reason for rejection
 		   */
+			fetch( "http://localhost:3000/api/auth/signup", {
+				method : "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					username: username,
+					password: password,
+					email   : email,
+				}),
+				next: { revalidate: 0 },
+			})
+				.then( res => res.json())
+				.then( data => console.log( data.username, data.password, data.email ));
 		}
 	}
 
@@ -61,9 +76,9 @@ export default function Signup() {
 				<input
 					id="name"
 					name="name"
-					onChange={ ( event ) => setName( event.target.value ) }
+					onChange={ ( event ) => setUsername( event.target.value ) }
 					type="text"
-					value={ name }
+					value={ username }
 				/>
 				<label htmlFor="email">Email:</label>
 				<input
