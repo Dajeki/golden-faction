@@ -1,17 +1,10 @@
-
 import { connectToDatabase } from "@/lib/mongodb";
 import { hash } from "bcrypt";
 import emailValidator from "@/lib/emailValidator";
 import usernameValidator from "@/lib/usernameValidator";
 import passwordValidator from "@/lib/passwordValidator";
 import { NextRequest } from "next/server";
-
-const invalidUsernameInclusion = new Set( [
-	"admin",
-	"root",
-	"guest",
-	"user",
-] );
+import BadWords from "bad-words";
 
 type signupRequestBody = { email: string; password: string; username: string };
 
@@ -19,6 +12,7 @@ type signupRequestBody = { email: string; password: string; username: string };
 if( !process.env.DB_USER_COLLECTION ) {
 	throw new Error( "Need to declare DB_USER_COLLECTION env variable" );
 }
+const badWordFilter = new BadWords();
 
 export async function POST( req: NextRequest ) {
 	//Getting email and password from body
@@ -47,12 +41,14 @@ export async function POST( req: NextRequest ) {
 		});
 	}
 
-	if( typeof username !== "string" ||  usernameValidator.validate( username )) {
+
+	if( typeof username !== "string" ||  usernameValidator.validate( username ) || badWordFilter.isProfane( username )) {
 		return new Response( JSON.stringify({ message: "Invalid username format" }), {
 			status: 422,
 		});
 	}
 
+	// !REQUIRED: Need to test DB  this to make sure it works.
 	//Connect with database
 	const { db } = await connectToDatabase();
 	const userCollection = db
@@ -68,7 +64,7 @@ export async function POST( req: NextRequest ) {
 	}
 
 	//case insensitive
-	const checkExistingUsername = await userCollection.findOne({ username }, { collation: { locale: "en", strength: 2 }});
+	const checkExistingUsername = await userCollection.findOne({ username }, { collation: { locale: "en_US", strength: 2 }});
 	if( checkExistingUsername ) {
 		return new Response( JSON.stringify({ message: "Username already in use" }), {
 			status: 422,
