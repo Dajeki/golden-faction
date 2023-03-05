@@ -155,6 +155,7 @@
 			"multi-line"
 		],
 		"use-isnan": "error",
+		"import/no-anonymous-default-export": "warn",
 		"template-curly-spacing": [
 			"error",
 			"always"

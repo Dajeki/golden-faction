@@ -33,14 +33,7 @@ export function isTempEmail( email: string ): boolean {
 	return tempEmailsSet.has( domain );
 }
 
-// eslint-disable-next-line import/no-anonymous-default-export
 export default {
 	validate,
 	isTempEmail,
 };
-
-
-// export default function isValidEmail( email: string ): boolean {
-// 	const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// 	return emailRegex.test( email );
-// }

@@ -1,6 +1,8 @@
 "use client";
 import { FormEvent, useState } from "react";
 import emailValidator from "@/lib/emailValidator.js";
+import passwordValidator from "@/lib/passwordValidator";
+import usernameValidator from "@/lib/usernameValidator";
 
 export default function Signup() {
 	const [username, setUsername] = useState( "" );
@@ -21,6 +23,9 @@ export default function Signup() {
 		if( usernameTrimmed === "" ) {
 			errors.push( "Name is required" );
 		}
+		else if( usernameValidator.validate( usernameTrimmed )) {
+			errors.push( "Invalid username format" );
+		}
 
 		if( emailTrimmed === "" ) {
 			errors.push( "Email is required" );
@@ -32,8 +37,8 @@ export default function Signup() {
 		if( passwordTrimmed === "" ) {
 			errors.push( "Password is required" );
 		}
-		else if( passwordTrimmed.length < 8 ) {
-			errors.push( "Password must be at least 8 characters long" );
+		else if( !passwordValidator.validate( passwordTrimmed )) {
+			errors.push( "Password must be at least 8 characters long and less than 30 characters" );
 		}
 
 		if( confirmPasswordTrimmed  === "" ) {

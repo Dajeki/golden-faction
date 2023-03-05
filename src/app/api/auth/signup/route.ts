@@ -2,6 +2,8 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { hash } from "bcrypt";
 import emailValidator from "@/lib/emailValidator";
+import usernameValidator from "@/lib/usernameValidator";
+import passwordValidator from "@/lib/passwordValidator";
 import { NextRequest } from "next/server";
 
 const invalidUsernameInclusion = new Set( [
@@ -28,7 +30,7 @@ export async function POST( req: NextRequest ) {
 
 	console.log( email, password, username );
 	//Validate
-	if( !email || typeof email !== "string" || !emailValidator.validate( email )) {
+	if( typeof email !== "string" || !emailValidator.validate( email )) {
 		return new Response( JSON.stringify({ message: "Incorrect email format" }), {
 			status: 422,
 		});
@@ -39,13 +41,13 @@ export async function POST( req: NextRequest ) {
 		});
 	}
 
-	if( !password || typeof password !== "string" || password.length < 8 ) {
+	if( typeof password !== "string" || !passwordValidator.validate( password )) {
 		return new Response( JSON.stringify({ message: "Invalid password format" }), {
 			status: 422,
 		});
 	}
 
-	if( !username || typeof username !== "string" || username.length < 4 || username.length > 30 ) {
+	if( typeof username !== "string" ||  usernameValidator.validate( username )) {
 		return new Response( JSON.stringify({ message: "Invalid username format" }), {
 			status: 422,
 		});
@@ -65,7 +67,8 @@ export async function POST( req: NextRequest ) {
 		});
 	}
 
-	const checkExistingUsername = await userCollection.findOne({ username });
+	//case insensitive
+	const checkExistingUsername = await userCollection.findOne({ username }, { collation: { locale: "en", strength: 2 }});
 	if( checkExistingUsername ) {
 		return new Response( JSON.stringify({ message: "Username already in use" }), {
 			status: 422,
@@ -81,10 +84,7 @@ export async function POST( req: NextRequest ) {
 	//Send success response
 	console.log( "Add user successful" );
 	return new Response( JSON.stringify({ message: "Add user successful" }), {
-		status : 200,
-		headers: {
-			"Content-Type": "application/json",
-		},
+		status: 200,
 	});
 }
 //...status
