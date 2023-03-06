@@ -1,8 +1,7 @@
 import NextAuth, { User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { connectToDatabase, getClientPromise } from "@/lib/mongodb";
+import { connectToDatabase } from "@/lib/mongodb";
 import { compare } from "bcryptjs";
-import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 
 
 export default NextAuth({

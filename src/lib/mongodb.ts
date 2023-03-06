@@ -1,4 +1,4 @@
-import { Db, MongoClient, MongoClientOptions } from "mongodb";
+import { Db, MongoClient } from "mongodb";
 let cachedClient: MongoClient;
 let cachedDb: Db;
 let clientPromise: Promise<MongoClient>;
@@ -44,11 +44,4 @@ export async function connectToDatabase() {
 		client: cachedClient,
 		db    : cachedDb,
 	};
-}
-
-export async function getClientPromise() {
-	if( !clientPromise ) {
-		await connectToDatabase();
-	}
-	return clientPromise;
 }
