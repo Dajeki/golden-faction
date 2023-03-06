@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useState } from "react";
-import emailValidator from "@/lib/emailValidator.js";
+import emailValidator from "@/lib/emailValidator";
 import passwordValidator from "@/lib/passwordValidator";
 import usernameValidator from "@/lib/usernameValidator";
 
@@ -23,7 +23,7 @@ export default function Signup() {
 		if( usernameTrimmed === "" ) {
 			errors.push( "Name is required" );
 		}
-		else if( usernameValidator.validate( usernameTrimmed )) {
+		else if( !usernameValidator.validate( usernameTrimmed )) {
 			errors.push( "Invalid username format" );
 		}
 

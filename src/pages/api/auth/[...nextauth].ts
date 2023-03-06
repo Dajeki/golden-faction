@@ -1,14 +1,19 @@
-import NextAuth from "next-auth";
+import NextAuth, { User } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { connectToDatabase } from "@/lib/mongodb";
-import { compare } from "bcrypt";
+import { connectToDatabase, getClientPromise } from "@/lib/mongodb";
+import { compare } from "bcryptjs";
 import { MongoDBAdapter } from "@next-auth/mongodb-adapter";
 
 
 export default NextAuth({
 	//Specify Provider
 	providers: [
-		MongoDbA({
+		CredentialsProvider({
+			name       : "Credentials",
+			credentials: {
+				email   : { label: "Email", type: "email" },
+				password: { label: "Password", type: "password" },
+			},
 			async authorize( credentials, req ) {
 				//Connect to DB
 				const { db } = await connectToDatabase();
@@ -31,7 +36,7 @@ export default NextAuth({
 				if( !checkPassword ) {
 					throw new Error( "Password doesnt match" );
 				}
-				return { username: result.username, email: result.email };
+				return { id: result._id.toString(), name: result.username, email: result.email, image: null  } as User;
 			},
 		}),
 	],

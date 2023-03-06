@@ -1,14 +1,18 @@
 "use client";
 import React, { FormEvent, useState } from "react";
+import { signIn, useSession } from "next-auth/react";
+//...
 
 export default function Login() {
-	const [username, setUsername] = useState( "" );
+	const [email, setEmail] = useState( "" );
 	const [password, setPassword] = useState( "" );
-	const [error, setError] = useState<null|string>( null );
+	const [error, setError] = useState<null | string>( null );
 
-	function handleSubmit( event: FormEvent<HTMLFormElement> ) {
+	const { data: session, status } = useSession();
+
+	async function handleSubmit( event: FormEvent<HTMLFormElement> ) {
 		event.preventDefault();
-		if( username.trim()==="" ) {
+		if( email.trim()==="" ) {
 			setError( "Username is required" );
 			return;
 		}
@@ -21,6 +25,13 @@ export default function Login() {
 		// Send login data to server
 		// ...
 		console.log( "sent to server!" );
+		const status = await signIn( "credentials", {
+			redirect   : true,
+			callbackUrl: "/",
+			email      : email,
+			password   : password,
+		});
+		console.log( status );
 	}
 
 	return (
@@ -47,11 +58,11 @@ export default function Login() {
 					id="username"
 					name="username"
 					onChange={
-						( event )=> setUsername( event.target.value )
+						( event )=> setEmail( event.target.value )
 					}
 					type="text"
 					value={
-						username
+						email
 					}
 				/>
 				<label htmlFor="password">Password:</label>
@@ -68,6 +79,11 @@ export default function Login() {
 				/>
 				<button type="submit">Login</button>
 			</form>
+			{ session && (
+				<div>
+					{ `Signed in as ${ session.username } with id ${ session.id }` }
+				</div>
+			) }
 		</div>
 	);
 }
