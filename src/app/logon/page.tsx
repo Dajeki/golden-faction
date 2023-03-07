@@ -53,10 +53,10 @@ export default function Login() {
 					handleSubmit
 				}
 			>
-				<label htmlFor="username">Username:</label>
+				<label htmlFor="email">Email:</label>
 				<input
-					id="username"
-					name="username"
+					id="email"
+					name="email"
 					onChange={
 						( event )=> setEmail( event.target.value )
 					}
@@ -79,11 +79,6 @@ export default function Login() {
 				/>
 				<button type="submit">Login</button>
 			</form>
-			{ session && (
-				<div>
-					{ `Signed in as ${ session.username } with id ${ session.id }` }
-				</div>
-			) }
 		</div>
 	);
 }

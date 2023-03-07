@@ -52,10 +52,7 @@ export default function Signup() {
 
 		if( errors.length === 0 ) {
 			console.log( "Sent the request to the server" );
-
-			/*
-			* TODO: send data to server and Reroute to the servers response of either accepted or the reason for rejection
-		   */
+			// TODO: send data to server and Reroute to the servers response of either accepted or the reason for rejection
 			fetch( "http://localhost:3000/api/auth/signup", {
 				method : "POST",
 				headers: {
@@ -70,6 +67,7 @@ export default function Signup() {
 				cache: "no-cache",
 			})
 				.then( res => res.json())
+				// TODO: Handle error messages to the user
 				.then( data => console.log( data.message ));
 		}
 	}

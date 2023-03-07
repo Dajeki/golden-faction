@@ -11,8 +11,6 @@ async function getSession( cookie: string ): Promise<Session> {
 	});
 
 	const session = await response.json();
-	console.log( Object.keys( session ));
-
 	return Object.keys( session ).length > 0 ? session : null;
 }
 
@@ -20,7 +18,6 @@ export default async function RootLayout({
 	children,
 }: { children: React.ReactNode }) {
 	const session = await getSession( headers().get( "cookie" ) ?? "" );
-	console.log( session );
 	return (
 		<html lang="en">
 			{ /*

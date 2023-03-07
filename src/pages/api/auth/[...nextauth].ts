@@ -35,8 +35,14 @@ export default NextAuth({
 				if( !checkPassword ) {
 					throw new Error( "Password doesnt match" );
 				}
-				return { id: result._id.toString(), name: result.username, email: result.email, image: null  } as User;
+				return { id: result._id.toString(), name: result.username, email: result.email, image: null, test: "test"  };
 			},
 		}),
 	],
+	callbacks: {
+		async session({ session, token, user }) {
+			session.user.test = "heller";
+			return session;
+		},
+	},
 });
