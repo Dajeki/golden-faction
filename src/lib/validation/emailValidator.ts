@@ -27,8 +27,7 @@ export function validate( email : string ) : boolean {
 export function isTempEmail( email: string ): boolean {
 	const domain = email.split( "@" ).at( -1 );
 	if( !domain ) {
-		//if we get here and validate for some reason doesnt pick it up send true so that this check causes the error.
-		return true;
+		return false;
 	}
 	return tempEmailsSet.has( domain );
 }

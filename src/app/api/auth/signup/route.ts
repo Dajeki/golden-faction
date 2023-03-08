@@ -1,8 +1,8 @@
 import { connectToDatabase } from "@/lib/mongodb";
 import { hash } from "bcryptjs";
-import emailValidator from "@/lib/emailValidator";
-import usernameValidator from "@/lib/usernameValidator";
-import passwordValidator from "@/lib/passwordValidator";
+import emailValidator from "@/lib/validation/emailValidator";
+import usernameValidator from "@/lib/validation/usernameValidator";
+import passwordValidator from "@/lib/validation/passwordValidator";
 import { NextRequest } from "next/server";
 import BadWords from "bad-words";
 

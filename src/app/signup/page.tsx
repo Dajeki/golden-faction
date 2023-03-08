@@ -1,8 +1,8 @@
 "use client";
 import { FormEvent, useState } from "react";
-import emailValidator from "@/lib/emailValidator";
-import passwordValidator from "@/lib/passwordValidator";
-import usernameValidator from "@/lib/usernameValidator";
+import emailValidator from "@/lib/validation/emailValidator";
+import passwordValidator from "@/lib/validation/passwordValidator";
+import usernameValidator from "@/lib/validation/usernameValidator";
 
 export default function Signup() {
 	const [username, setUsername] = useState( "" );

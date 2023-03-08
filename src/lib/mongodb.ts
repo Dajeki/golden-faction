@@ -1,7 +1,6 @@
 import { Db, MongoClient } from "mongodb";
 let cachedClient: MongoClient;
 let cachedDb: Db;
-let clientPromise: Promise<MongoClient>;
 
 export async function connectToDatabase() {
 	if( cachedClient && cachedDb ) {
@@ -23,9 +22,7 @@ export async function connectToDatabase() {
 	}
 	// Connect to cluster
 	cachedClient = new MongoClient( process.env.MONGODB_URI );
-
-	clientPromise = cachedClient.connect();
-	await clientPromise;
+	await cachedClient.connect();
 
 	cachedDb = cachedClient.db( process.env.MONGODB_DB );
 
