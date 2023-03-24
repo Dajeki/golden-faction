@@ -5,7 +5,7 @@ import { Unit } from "./unit";
 export class Effect {
 	name: string;
 	private _caster: Unit;
-	actions: EventEmitter = new EventEmitter();
+	private _actions: EventEmitter = new EventEmitter();
 
 	constructor( name: string, caster: Unit ) {
 		this.name = name;
@@ -13,7 +13,7 @@ export class Effect {
 	}
 
 	//TODO: Maybe type the event args for each Action?
-	on( event: keyof typeof Action, callback: ( ...eventArgs: unknown[] )=>void ) {
-		this.actions.on( event, callback );
+	on( event: keyof typeof Action, callback: ()=>void ) {
+		this._actions.on( event, callback );
 	}
 }

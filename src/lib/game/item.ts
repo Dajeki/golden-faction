@@ -1,4 +1,5 @@
 import EventEmitter from "node:events";
+import { Action } from "./action";
 import { Stats } from "./stats";
 
 export class Item {
@@ -8,6 +9,10 @@ export class Item {
 
 	constructor( name: string, stats: Stats ) {
 		this.name = name;
-		this.stats = { ...new Stats(), ...stats };
+		this.stats = stats;
+	}
+
+	on( event: keyof typeof Action, callback: ()=>void ) {
+		this._actions.on( event, callback );
 	}
 }
