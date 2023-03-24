@@ -33,7 +33,7 @@ export class Effect {
 
 	handleDuration( target: Unit ) {
 		this.duration -= 1;
-		if( !this.duration ) {
+		if( this.duration<= 0 ) {
 			target.removeDebuff( this );
 			return false;
 		}
