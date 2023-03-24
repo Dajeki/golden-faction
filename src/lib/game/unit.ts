@@ -110,7 +110,7 @@ export class Acolyte extends Unit {
 			const lowestHealthUnit = this.team.findLowestHealthUnit();
 			if( !lowestHealthUnit ) return;
 
-			const healAmount = Math.ceil( this.stats.attack * this.healCoef );
+			const healAmount = Math.round( this.stats.attack * this.healCoef );
 			lowestHealthUnit.stats.add( "health", healAmount );
 			this.totalAmountHealed += healAmount;
 
@@ -162,8 +162,25 @@ export class LargeSpider extends Unit {
 }
 
 export class Rogue extends Unit {
+	backstabCoef = .3;
+	sneakChance = .5;
+	sneakCoef = .5;
 	constructor() {
 		super( 1, 3 );
+
+		//Sneak Attack
+		this.on( Action.FIRST_ATTACK, ( target ) => {
+			if( Math.random() >= this.sneakChance ) {
+				target?.stats.subtract( Stat.HEALTH, this.stats.attack * this.sneakCoef );
+			}
+		});
+		//Backstab
+		this.on( Action.ATTACK, ( target ) => {
+			if( !target ) return;
+			if( this.stats.attack * 2 < target.stats.health ) {
+				target.stats.subtract( Stat.ATTACK, Math.round( this.stats.attack * this.backstabCoef ));
+			}
+		});
 	}
 }
 
