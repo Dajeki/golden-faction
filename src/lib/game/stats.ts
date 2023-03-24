@@ -1,5 +1,13 @@
 import { PropertiesOnly } from "../propertiesOnly";
 
+export enum Stat {
+	HEALTH = "health",
+	ATTACK = "attack",
+	CRITICAL = "crit",
+	DODGE = "dodge",
+	DEF = "def",
+	STRIKES = "strikes"
+}
 export class Stats {
 
 	//these are for sure getting assigned by the default values in the constructor

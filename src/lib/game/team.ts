@@ -4,6 +4,7 @@ import { Unit } from "./unit";
 export class Team {
 	name: string;
 	#game?: Game;
+	#opposingTeam?: Team;
 	units: Unit[];
 	constructor( name: string, ...units: Unit[] ) {
 		this.name = name;
@@ -16,9 +17,17 @@ export class Team {
 			this.#game = game;
 		}
 	}
-
 	get game(): Game|undefined {
 		return this.#game;
+	}
+
+	set opposingTeam( team: Team|undefined ) {
+		if( !this.#opposingTeam || !team ) {
+			this.#opposingTeam = team;
+		}
+	}
+	get opposingTeam(): Team|undefined {
+		return this.#opposingTeam;
 	}
 
 	findLowestHealthUnit() {

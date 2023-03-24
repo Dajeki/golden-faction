@@ -15,4 +15,8 @@ export class Game {
 	get round() {
 		return this.#round;
 	}
+
+	isAppropriateRound( everyXTurns: number ) {
+		return Boolean( this.round && !( this.round % everyXTurns ));
+	}
 }

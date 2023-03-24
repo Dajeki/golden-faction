@@ -1,8 +1,9 @@
 import EventEmitter from "node:events";
+import { PropertiesOnly } from "../propertiesOnly";
 import { Action } from "./action";
-import { Effect } from "./effect";
+import { Effect, PoisonFangs, WebWrap } from "./effect";
 import { Item } from "./item";
-import { Stats } from "./stats";
+import { Stat, Stats } from "./stats";
 import { Team } from "./team";
 
 export class Unit {
@@ -13,12 +14,43 @@ export class Unit {
 	items: Item[] = [];
 	isFirstAttack = true;
 	isDead = false;
+	isCrowdControlled = false;
 	#team?: Team;
 
 	private _actions:EventEmitter = new EventEmitter();
 
 	constructor( attack?: number, health?: number, def?: number, crit?: number, dodge?: number, strikes?: number ) {
-		this.stats =  new Stats( attack, health, def, crit, dodge, strikes );
+		this.stats = new Stats( attack, health, def, crit, dodge, strikes );
+
+		this.on( Action.FIRST_ATTACK, ( target ) => {
+			if( !target ) return;
+			this.isFirstAttack = false;
+			this.emit( Action.ATTACK, target );
+		});
+
+		this.on( Action.ATTACK, ( target ) => {
+			if( !target ) return;
+			target.stats.subtract( Stat.HEALTH, this.stats.attack );
+
+			console.log( `${ this.constructor.name } on team ${ this.team?.name } did ${ this.stats.attack } with basic attack to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
+		});
+		//Wire up Unit events to your items, buffs and debuffs
+		( Object.values( Action ) as ( keyof typeof Action )[] ).forEach( action => {
+			this.on( Action[action], () => {
+				this.items.forEach( item => {
+					item.emit( Action[action], this );
+				});
+
+				this.buffs.forEach( effect => {
+					effect.emit( Action[action], this );
+				});
+
+				this.debuffs.forEach( effect => {
+					effect.emit( Action[action], this );
+				});
+			});
+		});
+
 	}
 
 	set team( team: Team | undefined ) {
@@ -34,13 +66,39 @@ export class Unit {
 	on( event: keyof typeof Action, callback: ( target?:Unit )=>void ) {
 		this._actions.on( event, callback );
 	}
+
+	emit( event: keyof typeof Action, ...eventInfo: [Unit] ) {
+		this._actions.emit( event, ...eventInfo );
+	}
+
+	getUnitName() {
+		return this.constructor.name;
+	}
+
+	addBuff( buff: Effect ) {
+		this.buffs.push( buff );
+	}
+	addDebuff( debuff: Effect ) {
+		this.debuffs.push( debuff );
+	}
+
+	removeBuff( buff: Effect ) {
+		this.buffs.splice( this.buffs.findIndex(( currentBuff )=> currentBuff === buff ), 1 );
+	}
+	removeDebuff( debuff: Effect ) {
+		this.debuffs.splice( this.debuffs.findIndex(( currentDebuff )=> currentDebuff === debuff ), 1 );
+	}
+
 }
 
 //Tier 1 Units
 
 export class Acolyte extends Unit {
 	healCoef = .10;
+	sancCoef = .05;
+	roundsToHeal = 4;
 
+	totalAmountHealed = 0;
 
 	constructor() {
 		super( 2, 3 );
@@ -48,27 +106,58 @@ export class Acolyte extends Unit {
 		//Healing Flame
 		this.on( Action.END_OF_TURN, () => {
 			if( !this.team ) return;
-
+			if( this.team.game?.isAppropriateRound( this.roundsToHeal )) return;
 			const lowestHealthUnit = this.team.findLowestHealthUnit();
 			if( !lowestHealthUnit ) return;
 
 			const healAmount = Math.ceil( this.stats.attack * this.healCoef );
 			lowestHealthUnit.stats.add( "health", healAmount );
+			this.totalAmountHealed += healAmount;
 
-			console.log( `Acolyte on team ${ this.team?.name } healed ${ lowestHealthUnit } on team ${ this.team?.name } for ${ healAmount }` );
+			console.log( `${ this.constructor.name } on team ${ this.team?.name } healed ${ lowestHealthUnit } on team ${ this.team?.name } for ${ healAmount }` );
+		});
+
+		//Sanctimonious Flame
+		this.on( Action.ATTACK, ( target ) => {
+			if( !target ) return;
+			if( this.totalAmountHealed > target.stats.health ) {
+				const extraDamage = this.stats.attack * this.sancCoef;
+				target.stats.subtract( Stat.HEALTH, extraDamage );
+
+				console.log( `${ this.constructor.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
+			}
 		});
 	}
 }
 
 export class Goblin extends Unit {
+	goldEarned = 0;
+
 	constructor() {
 		super( 2, 2 );
+		//Pick Pocket
+		this.on( Action.ATTACK, ( target ) => {
+			this.goldEarned += .5;
+		});
+
+		this.on( Action.BEFORE_GAME, ( target ) => {
+			//TODO Wire this up to the DB to update the coins they start with on the round.
+		});
+
 	}
 }
 
 export class LargeSpider extends Unit {
 	constructor() {
 		super( 2, 2 );
+
+		this.on( Action.FIRST_ATTACK, ( target ) => {
+			target?.addDebuff( new WebWrap( this ));
+		});
+		this.on( Action.ATTACK, ( target ) => {
+			target?.addDebuff( new PoisonFangs( this ));
+		});
+
 	}
 }
 
