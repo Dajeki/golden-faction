@@ -31,16 +31,25 @@ export class Team {
 	}
 
 	findLowestHealthUnit() {
-		let lowestHealthUnit = this.units[0];
-		for( let i = 1; i < this.units.length; i++ ) {
-			lowestHealthUnit = lowestHealthUnit.stats.health <= this.units[i].stats.health
-				? lowestHealthUnit : this.units[i];
+		const firstNotDeadIndex = this.findFirstNotDeadUnitIndex();
+		let lowestHealthUnit: Unit | null = this.units[firstNotDeadIndex];
+		for( let i = firstNotDeadIndex + 1; i < this.units.length; i++ ) {
+			if( lowestHealthUnit.stats.health > this.units[i].stats.health && !this.units[i].isDead ) {
+				lowestHealthUnit = this.units[i];
+			}
 		}
 		return lowestHealthUnit;
 	}
 
 	findDeadUnit() {
-		return this.units.find(( unit )=>unit.isDead );
+		return this.units.find(( unit )=> unit.isDead );
+	}
+
+	findFirstNotDeadUnit() {
+		return this.units.find( unit => !unit.isDead );
+	}
+	findFirstNotDeadUnitIndex() {
+		return this.units.findIndex( unit => !unit.isDead );
 	}
 
 	getUnitIndex( target:Unit ) {

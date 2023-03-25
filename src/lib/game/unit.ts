@@ -58,24 +58,53 @@ export class Unit {
 			}
 		});
 		//Wire up Unit events to your items, buffs and debuffs
+		//They get the object they are on as the unit into the hadler
+
+
 		( Object.values( Action ) as ( keyof typeof Action )[] ).forEach( action => {
 			this.on( Action[action], () => {
-				this.items.forEach( item => {
-					item.emit( Action[action], this );
-				});
 
-				this.buffs.forEach( effect => {
-					effect.emit( Action[action], this );
-				});
+				let lastItemLength = this.items.length;
+				let lastBuffLength = this.buffs.length;
+				let lastDebuffLength = this.debuffs.length;
+				for(
+					let i = 0;
+					lastItemLength && i < this.items.length;
+					i = lastItemLength < this.items.length ? i : i++
+				) {
+					console.log( lastDebuffLength );
+					this.items[i].emit( Action[action], this );
+					lastItemLength = this.items.length;
+				}
+				for( let i = 0;
+					lastItemLength && i < this.buffs.length;
+					i = lastBuffLength < this.buffs.length ? i : i++
+				) {
+					this.buffs[i].emit( Action[action], this );
+					lastBuffLength = this.buffs.length;
+				}
+				for(
+					let i = 0;
+					lastItemLength && i < this.debuffs.length;
+					i = lastDebuffLength < this.debuffs.length ? i : i++
+				) {
 
-				this.debuffs.forEach( effect => {
-					effect.emit( Action[action], this );
-				});
+					this.debuffs[i].emit( Action[action], this );
+					lastDebuffLength = this.debuffs.length;
+				}
+				// this.items.forEach( item => {
+				// 	item.emit( Action[action], this );
+				// });
+
+				// this.buffs.forEach( effect => {
+				// 	effect.emit( Action[action], this );
+				// });
+
+				// this.debuffs.forEach( effect => {
+				// 	effect.emit( Action[action], this );
+				// });
 			});
 		});
-
-
-
 	}
 
 	set team( team: Team | undefined ) {
@@ -93,6 +122,8 @@ export class Unit {
 	}
 
 	emit( event: keyof typeof Action, ...eventInfo: [Unit] ) {
+		if( this.isDead ) return;
+		if( event !== Action.START_OF_TURN && event !== Action.END_OF_TURN && this.isCrowdControlled ) return;
 		this._actions.emit( event, ...eventInfo );
 	}
 
@@ -108,9 +139,11 @@ export class Unit {
 	}
 
 	removeBuff( buff: Effect ) {
+		console.log( `indx to remove: ${ this.buffs.findIndex(( currentBuff )=> currentBuff === buff ) }` );
 		this.buffs.splice( this.buffs.findIndex(( currentBuff )=> currentBuff === buff ), 1 );
 	}
 	removeDebuff( debuff: Effect ) {
+		console.log( `indx to remove: ${ this.debuffs.findIndex(( currentDebuff )=> currentDebuff === debuff ) }` );
 		this.debuffs.splice( this.debuffs.findIndex(( currentDebuff )=> currentDebuff === debuff ), 1 );
 	}
 
@@ -126,27 +159,27 @@ export class Acolyte extends Unit {
 	totalAmountHealed = 0;
 
 	constructor() {
-		super( 2, 3 );
+		super( 2, 3 * 5 );
 
 		//Healing Flame
 		this.on( Action.END_OF_TURN, () => {
 			if( !this.team ) return;
-			if( this.team.game?.isAppropriateRound( this.roundsToHeal )) return;
+			if( !this.team.game?.isAppropriateRound( this.roundsToHeal )) return;
 			const lowestHealthUnit = this.team.findLowestHealthUnit();
 			if( !lowestHealthUnit ) return;
 
-			const healAmount = Math.round( this.stats.attack * this.healCoef );
-			lowestHealthUnit.stats.add( "health", healAmount );
+			const healAmount = Math.ceil( this.stats.attack * this.healCoef );
+			lowestHealthUnit.stats.add( Stat.HEALTH, healAmount );
 			this.totalAmountHealed += healAmount;
 
-			console.log( `${ this.constructor.name } on team ${ this.team?.name } healed ${ lowestHealthUnit } on team ${ this.team?.name } for ${ healAmount }` );
+			console.log( `${ this.constructor.name } on team ${ this.team?.name } healed ${ lowestHealthUnit.getUnitName() } on team ${ this.team?.name } for ${ healAmount }` );
 		});
 
 		//Sanctimonious Flame
 		this.on( Action.ATTACK, ( target ) => {
 			if( !target ) return;
 			if( this.totalAmountHealed > target.stats.health ) {
-				const extraDamage = Math.round( this.stats.attack * this.sancCoef );
+				const extraDamage = Math.ceil( this.stats.attack * this.sancCoef );
 				target.stats.subtract( Stat.HEALTH, extraDamage );
 
 				console.log( `${ this.constructor.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
@@ -159,7 +192,7 @@ export class Goblin extends Unit {
 	goldEarned = 0;
 
 	constructor() {
-		super( 2, 2 );
+		super( 2, 2 * 5 );
 		//Pick Pocket
 		this.on( Action.ATTACK, ( target ) => {
 			this.goldEarned += .5;
@@ -174,11 +207,11 @@ export class Goblin extends Unit {
 
 export class LargeSpider extends Unit {
 	constructor() {
-		super( 2, 2 );
+		super( 2, 2 * 10  );
 
-		this.on( Action.FIRST_ATTACK, ( target ) => {
-			target?.addDebuff( new WebWrap( this ));
-		});
+		// this.on( Action.FIRST_ATTACK, ( target ) => {
+		// 	target?.addDebuff( new WebWrap( this ));
+		// });
 		this.on( Action.ATTACK, ( target ) => {
 			target?.addDebuff( new PoisonFangs( this ));
 		});
@@ -191,19 +224,23 @@ export class Rogue extends Unit {
 	sneakChance = .5;
 	sneakCoef = .5;
 	constructor() {
-		super( 1, 3 );
+		super( 1, 3 * 5  );
 
 		//Sneak Attack
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			if( Math.random() >= this.sneakChance ) {
-				target?.stats.subtract( Stat.HEALTH, this.stats.attack * this.sneakCoef );
+				const sneakDamage = Math.ceil( this.stats.attack * this.sneakCoef );
+				target?.stats.subtract( Stat.HEALTH, sneakDamage );
+				console.log( `${ this.getUnitName() } on team ${ this.team?.name } did ${ sneakDamage } with Sneak Attack to ${ target?.getUnitName() } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
 		//Backstab
 		this.on( Action.ATTACK, ( target ) => {
 			if( !target ) return;
 			if( this.stats.attack * 2 < target.stats.health ) {
-				target.stats.subtract( Stat.ATTACK, Math.round( this.stats.attack * this.backstabCoef ));
+				const backstabDamage = Math.ceil( this.stats.attack * this.backstabCoef );
+				target.stats.subtract( Stat.HEALTH, backstabDamage );
+				console.log( `${ this.getUnitName() } on team ${ this.team?.name } did ${ backstabDamage } with Backstab to ${ target?.getUnitName() } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
 	}
@@ -212,7 +249,7 @@ export class Rogue extends Unit {
 export class Warrior extends Unit {
 	cleaveCoef = .2;
 	constructor() {
-		super( 3, 3 );
+		super( 3, 3 * 5  );
 		this.addBuff( new Rally( this ));
 		//Cleave
 		this.on( Action.ATTACK, ( target ) => {
@@ -227,13 +264,18 @@ export class Warrior extends Unit {
 			let targetAfterIndex : number | null = targetIndex + 1;
 			targetAfterIndex = targetAfterIndex > target.team.units.length ? null : targetAfterIndex;
 
+			const cleaveDamage = Math.ceil( this.stats.attack * this.cleaveCoef );
+
 			if( targetBeforeIndex ) {
-				target.team.units[targetBeforeIndex].stats.subtract( Stat.HEALTH, Math.round( this.stats.attack * this.cleaveCoef ));
+				target.team.units[targetBeforeIndex].stats.subtract( Stat.HEALTH, cleaveDamage );
+				console.log( `${ this.getUnitName() } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ target.team.units[targetBeforeIndex].getUnitName() } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 			if( targetAfterIndex ) {
-				target.team.units[targetAfterIndex].stats.subtract( Stat.HEALTH, Math.round( this.stats.attack * this.cleaveCoef ));
+				target.team.units[targetAfterIndex].stats.subtract( Stat.HEALTH, cleaveDamage );
+				console.log( `${ this.getUnitName() } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ target.team.units[targetAfterIndex].getUnitName() } on team ${ this.team?.opposingTeam?.name }` );
 			}
+
 		});
 	}
 }

@@ -3,7 +3,7 @@ import { hash } from "bcryptjs";
 import emailValidator from "@/lib/validation/emailValidator";
 import usernameValidator from "@/lib/validation/usernameValidator";
 import passwordValidator from "@/lib/validation/passwordValidator";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import BadWords from "bad-words";
 
 type signupRequestBody = { email: string; password: string; username: string };
@@ -24,25 +24,25 @@ export async function POST( req: NextRequest ) {
 	console.log( email, password, username );
 	//Validate
 	if( typeof email !== "string" || !emailValidator.validate( email )) {
-		return new Response( JSON.stringify({ message: "Incorrect email format" }), {
+		return NextResponse.json( JSON.stringify({ message: "Incorrect email format" }), {
 			status: 422,
 		});
 	}
 	if( emailValidator.isTempEmail( email )) {
-		return new Response( JSON.stringify({ message: "The domain provided is a known temp email" }), {
+		return NextResponse.json( JSON.stringify({ message: "The domain provided is a known temp email" }), {
 			status: 422,
 		});
 	}
 
 	if( typeof password !== "string" || !passwordValidator.validate( password )) {
-		return new Response( JSON.stringify({ message: "Invalid password format" }), {
+		return NextResponse.json( JSON.stringify({ message: "Invalid password format" }), {
 			status: 422,
 		});
 	}
 
 
 	if( typeof username !== "string" ||  !usernameValidator.validate( username ) || badWordFilter.isProfane( username )) {
-		return new Response( JSON.stringify({ message: "Invalid username format" }), {
+		return NextResponse.json( JSON.stringify({ message: "Invalid username format" }), {
 			status: 422,
 		});
 	}
@@ -55,7 +55,7 @@ export async function POST( req: NextRequest ) {
 
 	const checkExistingEmail = await userCollection.findOne({ email });
 	if( checkExistingEmail ) {
-		return new Response( JSON.stringify({ message: "Email already in use" }), {
+		return NextResponse.json( JSON.stringify({ message: "Email already in use" }), {
 			status: 422,
 		});
 	}
@@ -63,7 +63,7 @@ export async function POST( req: NextRequest ) {
 	//case insensitive
 	const checkExistingUsername = await userCollection.findOne({ username }, { collation: { locale: "en_US", strength: 2 }});
 	if( checkExistingUsername ) {
-		return new Response( JSON.stringify({ message: "Username already in use" }), {
+		return NextResponse.json( JSON.stringify({ message: "Username already in use" }), {
 			status: 422,
 		});
 	}
@@ -77,7 +77,7 @@ export async function POST( req: NextRequest ) {
 	console.log( status );
 	//Send success response
 	console.log( "Add user successful" );
-	return new Response( JSON.stringify({ message: "Add user successful" }), {
+	return NextResponse.json( JSON.stringify({ message: "Add user successful" }), {
 		status: 200,
 	});
 }
