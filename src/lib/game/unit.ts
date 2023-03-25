@@ -12,6 +12,7 @@ export class Unit {
 	debuffs: Effect[] = [];
 	items: Item[] = [];
 	isFirstAttack = true;
+	isFirstDamageTaken = true;
 	isDead = false;
 	isCrowdControlled = false;
 	#team?: Team;
@@ -20,6 +21,7 @@ export class Unit {
 
 	constructor( attack?: number, health?: number, def?: number, crit?: number, dodge?: number, strikes?: number ) {
 		this.stats = new Stats( attack, health, def, crit, dodge, strikes );
+		this.stats.setOwner( this );
 
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			if( !target ) return;
@@ -32,6 +34,28 @@ export class Unit {
 			target.stats.subtract( Stat.HEALTH, this.stats.attack );
 
 			console.log( `${ this.constructor.name } on team ${ this.team?.name } did ${ this.stats.attack } with basic attack to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
+		});
+
+		//fire off the After Unit Behind and Attack events after the unit attacks
+		this.on( Action.AFTER_ATTACK, () => {
+			const thisUnitsIndex = this.team?.getUnitIndex( this );
+			if( !thisUnitsIndex|| !this.team ) return;
+
+			let targetBeforeIndex : number | null = thisUnitsIndex - 1;
+			targetBeforeIndex = targetBeforeIndex < 0 ? null : targetBeforeIndex;
+
+			let targetAfterIndex : number | null = thisUnitsIndex + 1;
+			targetAfterIndex = targetAfterIndex >= this.team.units.length ? null : targetAfterIndex;
+
+			//target before means this unit is behind
+			if( targetBeforeIndex ) {
+				this.team.units[targetBeforeIndex].emit( Action.AFTER_UNIT_BEHIND_ATTACK, this );
+			}
+
+			//target after means that this unit is ahead
+			if( targetAfterIndex ) {
+				this.team.units[targetAfterIndex].emit( Action.AFTER_UNIT_AHEAD_ATTACK, this );
+			}
 		});
 		//Wire up Unit events to your items, buffs and debuffs
 		( Object.values( Action ) as ( keyof typeof Action )[] ).forEach( action => {
@@ -49,6 +73,8 @@ export class Unit {
 				});
 			});
 		});
+
+
 
 	}
 

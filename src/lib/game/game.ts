@@ -13,7 +13,7 @@ export class Game {
 		this.#teamTwo.game = this;
 		this.#round = round;
 
-		this.start();
+		this.run();
 	}
 
 	get round() {
@@ -24,7 +24,7 @@ export class Game {
 		return Boolean( this.round && !( this.round % everyXTurns ));
 	}
 
-	start() {
+	run() {
 		let teamOneHasAliveUnits = true;
 		let teamTwoHasAliveUnits = true;
 		let firstAliveTeamOne = this.#teamOne.units.find( unit => !unit.isDead );
@@ -34,15 +34,25 @@ export class Game {
 			return;
 		}
 
-		firstAliveTeamOne.emit( Action.BEFORE_GAME, firstAliveTeamTwo );
-		firstAliveTeamTwo.emit( Action.BEFORE_GAME, firstAliveTeamOne );
+		this.#teamOne.units.forEach( unit => {
+			unit.emit( Action.BEFORE_GAME, unit );
+		});
+		this.#teamTwo.units.forEach( unit => {
+			unit.emit( Action.BEFORE_GAME, unit );
+		});
 		// eslint-disable-next-line no-constant-condition
 		while( true ) {
 
-			firstAliveTeamOne.emit( Action.START_OF_TURN, firstAliveTeamTwo );
-			firstAliveTeamTwo.emit( Action.START_OF_TURN, firstAliveTeamOne );
+			this.#teamOne.units.forEach( unit => {
+				unit.emit( Action.START_OF_TURN, unit );
+			});
+			this.#teamTwo.units.forEach( unit => {
+				unit.emit( Action.START_OF_TURN, unit );
+			});
+
 			firstAliveTeamOne.emit( Action.BEFORE_ATTACK, firstAliveTeamTwo );
 			firstAliveTeamTwo.emit( Action.BEFORE_ATTACK, firstAliveTeamOne );
+
 			if( firstAliveTeamOne.isFirstAttack ) {
 				firstAliveTeamOne.emit( Action.FIRST_ATTACK, firstAliveTeamTwo );
 			}
@@ -56,6 +66,15 @@ export class Game {
 				firstAliveTeamTwo.emit( Action.ATTACK, firstAliveTeamOne );
 			}
 
+			firstAliveTeamOne.emit( Action.AFTER_ATTACK, firstAliveTeamTwo );
+			firstAliveTeamTwo.emit( Action.AFTER_ATTACK, firstAliveTeamOne );
+
+			this.#teamOne.units.forEach( unit => {
+				unit.emit( Action.END_OF_TURN, unit );
+			});
+			this.#teamTwo.units.forEach( unit => {
+				unit.emit( Action.END_OF_TURN, unit );
+			});
 
 			//At the end of everything check for any dead teams.
 			teamOneHasAliveUnits = this.#teamOne.units.some( unit => !unit.isDead );

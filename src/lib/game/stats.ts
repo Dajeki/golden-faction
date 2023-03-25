@@ -1,4 +1,6 @@
 import { PropertiesOnly } from "../propertiesOnly";
+import { Action } from "./action";
+import { Unit } from "./unit";
 
 export enum Stat {
 	HEALTH = "health",
@@ -17,6 +19,7 @@ export class Stats {
 	#dodge: number;
 	#def: number;
 	#strikes: number;
+	owner?: Unit;
 
 	get health() {
 		return this.#health;
@@ -46,6 +49,10 @@ export class Stats {
 		this.#strikes = strikes;
 	}
 
+	setOwner( unit: Unit ) {
+		this.owner = unit;
+	}
+
 	//TS does not reconize the private variable dynamically so we are stuck with a switch *facepalm*
 	// TODO: Find a way to access properties dynamically with a public getter and a private setter. Get rid of these darn switch cases.
 	add( stat: keyof PropertiesOnly<Stats>, amount: number ) {
@@ -54,7 +61,14 @@ export class Stats {
 			this.#attack += amount;
 			break;
 		case "health":
-			this.#health += amount;
+			if( this.owner ) {
+				this.owner.emit( Action.BEFORE_TAKE_DAMAGE, this.owner );
+				this.#health += amount;
+				this.owner.emit( Action.AFTER_TAKE_DAMAGE, this.owner );
+				if( this.owner.isFirstDamageTaken ) {
+					this.owner.emit( Action.FIRST_TAKE_DAMAGE, this.owner );
+				}
+			}
 			break;
 		case "def":
 			this.#def += amount;
