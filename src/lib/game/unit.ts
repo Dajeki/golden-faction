@@ -63,46 +63,27 @@ export class Unit {
 
 		( Object.values( Action ) as ( keyof typeof Action )[] ).forEach( action => {
 			this.on( Action[action], () => {
-
-				let lastItemLength = this.items.length;
-				let lastBuffLength = this.buffs.length;
-				let lastDebuffLength = this.debuffs.length;
 				for(
-					let i = 0;
-					lastItemLength && i < this.items.length;
-					i = lastItemLength < this.items.length ? i : i++
+					let i = this.items.length - 1;
+					this.items.length && i >= 0;
+					i--
 				) {
-					console.log( lastDebuffLength );
 					this.items[i].emit( Action[action], this );
-					lastItemLength = this.items.length;
 				}
-				for( let i = 0;
-					lastItemLength && i < this.buffs.length;
-					i = lastBuffLength < this.buffs.length ? i : i++
+				for(
+					let i = this.buffs.length - 1;
+					this.buffs.length && i >= 0;
+					i--
 				) {
 					this.buffs[i].emit( Action[action], this );
-					lastBuffLength = this.buffs.length;
 				}
 				for(
-					let i = 0;
-					lastItemLength && i < this.debuffs.length;
-					i = lastDebuffLength < this.debuffs.length ? i : i++
+					let i = this.debuffs.length - 1;
+					this.debuffs.length && i >= 0;
+					i--
 				) {
-
 					this.debuffs[i].emit( Action[action], this );
-					lastDebuffLength = this.debuffs.length;
 				}
-				// this.items.forEach( item => {
-				// 	item.emit( Action[action], this );
-				// });
-
-				// this.buffs.forEach( effect => {
-				// 	effect.emit( Action[action], this );
-				// });
-
-				// this.debuffs.forEach( effect => {
-				// 	effect.emit( Action[action], this );
-				// });
 			});
 		});
 	}
@@ -139,11 +120,9 @@ export class Unit {
 	}
 
 	removeBuff( buff: Effect ) {
-		console.log( `indx to remove: ${ this.buffs.findIndex(( currentBuff )=> currentBuff === buff ) }` );
-		this.buffs.splice( this.buffs.findIndex(( currentBuff )=> currentBuff === buff ), 1 );
+		this.buffs.splice( this.buffs.findIndex(( currentBuff )=> currentBuff === buff )-1, 1 );
 	}
 	removeDebuff( debuff: Effect ) {
-		console.log( `indx to remove: ${ this.debuffs.findIndex(( currentDebuff )=> currentDebuff === debuff ) }` );
 		this.debuffs.splice( this.debuffs.findIndex(( currentDebuff )=> currentDebuff === debuff ), 1 );
 	}
 

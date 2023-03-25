@@ -32,12 +32,12 @@ export class Effect {
 	}
 
 	handleDuration( target: Unit ) {
-
+		this.duration -= 1;
 		if( this.duration === 0 ) {
 			target.removeDebuff( this );
 			return false;
 		}
-		this.duration -= 1;
+
 		return true;
 	}
 }
@@ -51,12 +51,12 @@ export class PoisonFangs extends Effect {
 
 		this.on( Action.START_OF_TURN, ( target ) => {
 			if( !target ) return;
-			console.log( target.debuffs.map(( value ) => {
-				return {
-					"name"    : value.getEffectName(),
-					"duration": value.duration,
-				};
-			}));
+			// console.log( target.debuffs.map(( value ) => {
+			// 	return {
+			// 		"name"    : value.getEffectName(),
+			// 		"duration": value.duration,
+			// 	};
+			// }));
 			this.handleDuration( target );
 			target?.stats.subtract( Stat.HEALTH, 1 );
 			console.log( `${ this.caster.getUnitName() } on team ${ target.team?.opposingTeam?.name } did ${ 1 } damage with ${ this.getEffectName() } to ${ target.getUnitName() } on team ${ target.team?.name }` );
