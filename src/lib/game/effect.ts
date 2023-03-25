@@ -79,3 +79,27 @@ export class WebWrap extends Effect {
 		});
 	}
 }
+
+export class Rally extends Effect {
+	warriorUnits = ["OrcWarrior", "Paladin", "Minotaur"];
+	lastNumberOfWarriors = 0;
+	constructior( caster: Unit ) {
+		this.on( Action.BEFORE_GAME, ( target ) => {
+			if( !this.caster.team ) return;
+			const numberOfWarriors = this.caster.team.units.reduce(( reducer, unit ) => {
+				return this.warriorUnits.includes( unit.getUnitName()) ? ++reducer : reducer;
+			}, 0 );
+			//this should increase or decrease based on the difference appropriately.
+			this.caster.stats.subtract( Stat.ATTACK, this.lastNumberOfWarriors - numberOfWarriors );
+		});
+
+		//Repeat process on the end of every turn.
+		this.on( Action.END_OF_TURN, () => {
+			if( !this.caster.team ) return;
+			const numberOfWarriors = this.caster.team.units.reduce(( reducer, unit ) => {
+				return this.warriorUnits.includes( unit.getUnitName()) ? ++reducer : reducer;
+			}, 0 );
+			this.caster.stats.subtract( Stat.ATTACK, this.lastNumberOfWarriors - numberOfWarriors );
+		});
+	}
+}

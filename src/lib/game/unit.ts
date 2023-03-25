@@ -1,7 +1,8 @@
 import EventEmitter from "node:events";
+import { createLessThan } from "typescript";
 import { PropertiesOnly } from "../propertiesOnly";
 import { Action } from "./action";
-import { Effect, PoisonFangs, WebWrap } from "./effect";
+import { Effect, PoisonFangs, Rally, WebWrap } from "./effect";
 import { Item } from "./item";
 import { Stat, Stats } from "./stats";
 import { Team } from "./team";
@@ -185,8 +186,31 @@ export class Rogue extends Unit {
 }
 
 export class Warrior extends Unit {
+	cleaveCoef = .2;
 	constructor() {
 		super( 3, 3 );
+		this.addBuff( new Rally( this ));
+		//Cleave
+		this.on( Action.ATTACK, ( target ) => {
+			if( !target ) return;
+
+			const targetIndex = target.team?.getUnitIndex( target );
+			if( !targetIndex|| !target.team ) return;
+
+			let targetBeforeIndex : number | null = targetIndex - 1;
+			targetBeforeIndex = targetBeforeIndex < 0 ? null : targetBeforeIndex;
+
+			let targetAfterIndex : number | null = targetIndex + 1;
+			targetAfterIndex = targetAfterIndex > target.team.units.length ? null : targetAfterIndex;
+
+			if( targetBeforeIndex ) {
+				target.team.units[targetBeforeIndex].stats.subtract( Stat.HEALTH, Math.round( this.stats.attack * this.cleaveCoef ));
+			}
+
+			if( targetAfterIndex ) {
+				target.team.units[targetAfterIndex].stats.subtract( Stat.HEALTH, Math.round( this.stats.attack * this.cleaveCoef ));
+			}
+		});
 	}
 }
 

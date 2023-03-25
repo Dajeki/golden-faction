@@ -42,4 +42,8 @@ export class Team {
 	findDeadUnit() {
 		return this.units.find(( unit )=>unit.isDead );
 	}
+
+	getUnitIndex( target:Unit ) {
+		return this.units.findIndex(( unit )=>unit === target );
+	}
 }
