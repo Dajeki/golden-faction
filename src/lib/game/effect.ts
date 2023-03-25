@@ -75,7 +75,7 @@ export class WebWrap extends Effect {
 			}
 
 			target.isCrowdControlled = true;
-			console.log( `${ this.caster.getUnitName() } on team ${ target.team?.opposingTeam?.name }'s ${ this.getEffectName() } crowd controlled ${ target.getUnitName() }` );
+			console.log( `${ this.caster.getUnitName() } on team ${ this.caster.team?.name }'s ${ this.getEffectName() } crowd controlled ${ target.getUnitName() }` );
 		});
 	}
 }
@@ -83,6 +83,7 @@ export class WebWrap extends Effect {
 export class Rally extends Effect {
 	warriorUnits = ["OrcWarrior", "Paladin", "Minotaur"];
 	lastNumberOfWarriors = 0;
+	rallyCoef = .3;
 	constructior( caster: Unit ) {
 		this.on( Action.BEFORE_GAME, ( target ) => {
 			if( !this.caster.team ) return;
@@ -90,7 +91,9 @@ export class Rally extends Effect {
 				return this.warriorUnits.includes( unit.getUnitName()) ? ++reducer : reducer;
 			}, 0 );
 			//this should increase or decrease based on the difference appropriately.
-			this.caster.stats.subtract( Stat.ATTACK, this.lastNumberOfWarriors - numberOfWarriors );
+			const warriorDIfference = this.lastNumberOfWarriors - numberOfWarriors;
+			this.caster.stats.subtract( Stat.ATTACK, Math.round( warriorDIfference * caster.stats.attack * this.rallyCoef ));
+			console.log( `${ this.caster.getUnitName() } on team ${ this.caster.team?.name }'s ${ this.getEffectName() } changed Attack ${ warriorDIfference }` );
 		});
 
 		//Repeat process on the end of every turn.
@@ -99,7 +102,9 @@ export class Rally extends Effect {
 			const numberOfWarriors = this.caster.team.units.reduce(( reducer, unit ) => {
 				return this.warriorUnits.includes( unit.getUnitName()) ? ++reducer : reducer;
 			}, 0 );
-			this.caster.stats.subtract( Stat.ATTACK, this.lastNumberOfWarriors - numberOfWarriors );
+			const warriorDIfference = this.lastNumberOfWarriors - numberOfWarriors;
+			this.caster.stats.subtract( Stat.ATTACK, Math.round( warriorDIfference * caster.stats.attack * this.rallyCoef ));
+			console.log( `${ this.caster.getUnitName() } on team ${ this.caster.team?.name }'s ${ this.getEffectName() } changed Attack ${ warriorDIfference }` );
 		});
 	}
 }

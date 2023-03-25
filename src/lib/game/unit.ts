@@ -1,6 +1,4 @@
 import EventEmitter from "node:events";
-import { createLessThan } from "typescript";
-import { PropertiesOnly } from "../propertiesOnly";
 import { Action } from "./action";
 import { Effect, PoisonFangs, Rally, WebWrap } from "./effect";
 import { Item } from "./item";
@@ -122,7 +120,7 @@ export class Acolyte extends Unit {
 		this.on( Action.ATTACK, ( target ) => {
 			if( !target ) return;
 			if( this.totalAmountHealed > target.stats.health ) {
-				const extraDamage = this.stats.attack * this.sancCoef;
+				const extraDamage = Math.round( this.stats.attack * this.sancCoef );
 				target.stats.subtract( Stat.HEALTH, extraDamage );
 
 				console.log( `${ this.constructor.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
