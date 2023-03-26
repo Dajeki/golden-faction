@@ -27,4 +27,8 @@ export class Item {
 	emit( event: keyof typeof Action, ...eventInfo: [Unit] ) {
 		this._actions.emit( event, ...eventInfo );
 	}
+
+	getItemName() {
+		return this.name;
+	}
 }

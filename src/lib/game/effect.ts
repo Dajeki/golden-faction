@@ -9,8 +9,10 @@ export class Effect {
 	private _caster: Unit;
 	private _actions: EventEmitter = new EventEmitter();
 	duration = 0;
+	name: string;
 
-	constructor( caster: Unit ) {
+	constructor( name: string, caster: Unit ) {
+		this.name = name;
 		this._caster = caster;
 	}
 
@@ -28,7 +30,7 @@ export class Effect {
 	}
 
 	getEffectName() {
-		return this.constructor.name;
+		return this.name;
 	}
 
 	handleDuration( target: Unit ) {
@@ -47,16 +49,10 @@ export class PoisonFangs extends Effect {
 	duration = 2;
 
 	constructor( caster: Unit ) {
-		super( caster );
+		super( "Poison Fang", caster );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
 			if( !target ) return;
-			// console.log( target.debuffs.map(( value ) => {
-			// 	return {
-			// 		"name"    : value.getEffectName(),
-			// 		"duration": value.duration,
-			// 	};
-			// }));
 			this.handleDuration( target );
 			target?.stats.subtract( Stat.HEALTH, 1 );
 			console.log( `${ this.caster.getUnitName() } on team ${ target.team?.opposingTeam?.name } did ${ 1 } damage with ${ this.getEffectName() } to ${ target.getUnitName() } on team ${ target.team?.name }` );
@@ -67,19 +63,18 @@ export class PoisonFangs extends Effect {
 
 export class WebWrap extends Effect {
 	duration = 3;
-
+	isStillRunning = true;
 	constructor( caster: Unit ) {
-		super( caster );
+		super( "Web Wrap", caster );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
 			if( !target ) return;
 
-			const isStillRunning = this.handleDuration( target );
-			if( !isStillRunning ) {
+			if( !this.isStillRunning ) {
 				target.isCrowdControlled = false;
 				return;
 			}
-
+			this.isStillRunning = this.handleDuration( target );
 			target.isCrowdControlled = true;
 			console.log( `${ this.caster.getUnitName() } on team ${ this.caster.team?.name }'s ${ this.getEffectName() } crowd controlled ${ target.getUnitName() }` );
 		});
@@ -90,7 +85,8 @@ export class Rally extends Effect {
 	warriorUnits = ["OrcWarrior", "Paladin", "Minotaur"];
 	lastNumberOfWarriors = 0;
 	rallyCoef = .3;
-	constructior( caster: Unit ) {
+	constructor( caster: Unit ) {
+		super( "Rally", caster );
 		this.on( Action.BEFORE_GAME, ( target ) => {
 			if( !this.caster.team ) return;
 			const numberOfWarriors = this.caster.team.units.reduce(( reducer, unit ) => {
