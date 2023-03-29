@@ -27,8 +27,8 @@ export class Game {
 	run() {
 		let teamOneHasAliveUnits = true;
 		let teamTwoHasAliveUnits = true;
-		let firstAliveTeamOne = this.#teamOne.units.find( unit => !unit.isDead );
-		let firstAliveTeamTwo = this.#teamTwo.units.find( unit => !unit.isDead );
+		let firstAliveTeamOne = this.#teamOne.findFirstAliveUnit();
+		let firstAliveTeamTwo = this.#teamTwo.findFirstAliveUnit();
 
 		if( !firstAliveTeamOne || !firstAliveTeamTwo ) {
 			return;
@@ -41,14 +41,17 @@ export class Game {
 			unit.emit( Action.BEFORE_GAME, firstAliveTeamOne! );
 		});
 		// eslint-disable-next-line no-constant-condition
-		while( true ) {
+		while( true && this.#round <= 200 ) {
 			console.log( `START OF ROUND: ${ this.#round }` );
 			this.#round++;
 
 			this.#teamOne.units.forEach(( unit, indx ) => {
+				if( unit.isDead ) return;
 				unit.emit( Action.START_OF_TURN, firstAliveTeamTwo! );
 			});
+
 			this.#teamTwo.units.forEach(( unit, indx ) => {
+				if( unit.isDead ) return;
 				unit.emit( Action.START_OF_TURN, firstAliveTeamOne! );
 			});
 
@@ -73,20 +76,26 @@ export class Game {
 			firstAliveTeamTwo.emit( Action.AFTER_ATTACK, firstAliveTeamOne );
 
 			this.#teamOne.units.forEach( unit => {
+				if( unit.isDead ) return;
 				unit.emit( Action.END_OF_TURN, firstAliveTeamTwo! );
 			});
 			this.#teamTwo.units.forEach( unit => {
+				if( unit.isDead ) return;
 				unit.emit( Action.END_OF_TURN, firstAliveTeamOne! );
 			});
 
 			this.#teamOne.units.forEach( unit=>{
-				if( unit.stats.health <= 0 ) {
+				if( !unit.isDead && unit.currentHealth <= 0 ) {
 					unit.isDead = true;
+					unit.killer?.emit( Action.KILLED_UNIT, unit );
+					unit.emit( Action.DIE, firstAliveTeamTwo! );
 				}
 			});
 			this.#teamTwo.units.forEach( unit=>{
-				if( unit.stats.health <= 0 ) {
+				if( !unit.isDead && unit.currentHealth <= 0 ) {
 					unit.isDead = true;
+					unit.killer?.emit( Action.KILLED_UNIT, unit );
+					unit.emit( Action.DIE, firstAliveTeamOne! );
 				}
 			});
 
@@ -108,11 +117,13 @@ export class Game {
 				return;
 			}
 
-			firstAliveTeamOne = this.#teamOne.units.find( unit => !unit.isDead );
-			firstAliveTeamTwo = this.#teamTwo.units.find( unit => !unit.isDead );
+			firstAliveTeamOne = this.#teamOne.findFirstAliveUnit();
+			firstAliveTeamTwo = this.#teamTwo.findFirstAliveUnit();
 			if( !firstAliveTeamOne || !firstAliveTeamTwo ) {
 				return;
 			}
+
+			// console.log( this.#teamOne.toString(), this.#teamTwo.toString());
 		}
 	}
 }

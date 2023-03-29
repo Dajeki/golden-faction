@@ -9,19 +9,23 @@ export class Item {
 	stats: Stats;
 	private _actions: EventEmitter = new EventEmitter();
 
-	constructor( name: string, stats: Stats ) {
+	constructor( name: string, attack?: number, health?: number, def?: number, crit?: number, dodge?: number, strikes?: number ) {
 		this.name = name;
-		this.stats = stats;
+		this.stats = new Stats( attack, health, def, crit, dodge, strikes );
 
 		this.on( Action.BEFORE_GAME, ( unit ) => {
 			( Object.keys( this.stats ) as ( keyof PropertiesOnly<Stats> )[] ).forEach( stat => {
-				unit?.stats.add( stat, this.stats[stat] );
+				if( !stat || typeof stat !== "number" ) return;
+				const currentStat = this.stats[stat];
+				if( !currentStat || typeof this.stats[stat] !== "number" ) return;
+
+				unit?.stats.add( stat, currentStat );
 			});
 		});
 	}
 
 	on( event: keyof typeof Action, callback: ( unit?:Unit )=>void ) {
-		this._actions.on( event, callback );
+		this._actions.prependListener( event, callback );
 	}
 
 	emit( event: keyof typeof Action, ...eventInfo: [Unit] ) {

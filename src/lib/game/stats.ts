@@ -56,20 +56,20 @@ export class Stats {
 	//TS does not reconize the private variable dynamically so we are stuck with a switch *facepalm*
 	// TODO: Find a way to access properties dynamically with a public getter and a private setter. Get rid of these darn switch cases.
 	add( stat: keyof PropertiesOnly<Stats>, amount: number ) {
+		if( amount < 0 ) {
+			this.subtract( stat, amount );
+			return;
+		}
+
 		switch ( stat ) {
 		case "attack":
 			this.#attack += amount;
 			break;
-		case "health":
-			if( this.owner ) {
-				this.owner.emit( Action.BEFORE_TAKE_DAMAGE, this.owner );
-				this.#health += amount;
-				this.owner.emit( Action.AFTER_TAKE_DAMAGE, this.owner );
-				if( this.owner.isFirstDamageTaken ) {
-					this.owner.emit( Action.FIRST_TAKE_DAMAGE, this.owner );
-				}
-			}
+		case "health": {
+			this.#health += amount;
+			this.owner?.heal( amount );
 			break;
+		}
 		case "def":
 			this.#def += amount;
 			break;
@@ -85,13 +85,20 @@ export class Stats {
 		}
 	}
 
-	subtract( stat: keyof PropertiesOnly<Stats>, amount: number ) {
+	subtract( stat: keyof PropertiesOnly<Stats>, amount: number, unitModifying?: Unit )   {
+		if( amount <= 0 ) {
+			this.add( stat, Math.abs( amount ));
+			return;
+		}
+
 		switch ( stat ) {
 		case "attack":
 			this.#attack -= amount;
 			break;
 		case "health":
+			if( !unitModifying ) return;
 			this.#health -= amount;
+			this.owner?.hurt( amount, unitModifying );
 			break;
 		case "def":
 			this.#def -= amount;
