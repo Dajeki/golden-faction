@@ -92,7 +92,7 @@ export class WebWrap extends Effect {
 }
 
 export class Rally extends Effect {
-	warriorUnits = ["🪓 Warrior", "Orc Warrior", "🛡️ Paladin", "Minotaur"];
+	warriorUnits = ["💪 Warrior", "🪓 Orc Warrior", "🛡️ Paladin", "🐂 Minotaur"];
 	lastNumberOfWarriors = 0;
 	rallyCoef = .3;
 	constructor( caster: Unit ) {

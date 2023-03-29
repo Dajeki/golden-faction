@@ -5,7 +5,13 @@ export class Game {
 	#round = 0;
 	#teamOne: Team;
 	#teamTwo: Team;
-	winner: Team | "draw" | null = null;
+	outcome: {
+		winner: Team | "draw" | null;
+		loser: Team | "draw" | null
+	} = {
+			winner: null,
+			loser : null,
+		};
 	constructor( teamOne: Team, teamTwo: Team, round: number ) {
 		this.#teamOne = teamOne;
 		this.#teamOne.game = this;
@@ -41,7 +47,7 @@ export class Game {
 			unit.emit( Action.BEFORE_GAME, firstAliveTeamOne! );
 		});
 		// eslint-disable-next-line no-constant-condition
-		while( true && this.#round <= 200 ) {
+		while( true && this.#round <= 600 ) {
 			console.log( `START OF ROUND: ${ this.#round }` );
 			this.#round++;
 
@@ -84,18 +90,20 @@ export class Game {
 				unit.emit( Action.END_OF_TURN, firstAliveTeamOne! );
 			});
 
-			this.#teamOne.units.forEach( unit=>{
+			this.#teamOne.units.forEach( unit =>{
 				if( !unit.isDead && unit.currentHealth <= 0 ) {
 					unit.isDead = true;
 					unit.killer?.emit( Action.KILLED_UNIT, unit );
 					unit.emit( Action.DIE, firstAliveTeamTwo! );
+					console.log( `${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }` );
 				}
 			});
-			this.#teamTwo.units.forEach( unit=>{
+			this.#teamTwo.units.forEach( unit =>{
 				if( !unit.isDead && unit.currentHealth <= 0 ) {
 					unit.isDead = true;
 					unit.killer?.emit( Action.KILLED_UNIT, unit );
 					unit.emit( Action.DIE, firstAliveTeamOne! );
+					console.log( `${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }` );
 				}
 			});
 
@@ -105,15 +113,18 @@ export class Game {
 			teamTwoHasAliveUnits = this.#teamTwo.units.some( unit => !unit.isDead );
 
 			if( !teamOneHasAliveUnits && !teamTwoHasAliveUnits ) {
-				this.winner = "draw";
+				this.outcome.winner = "draw";
+				this.outcome.loser = "draw";
 				return;
 			}
 			else if( !teamOneHasAliveUnits ) {
-				this.winner = this.#teamTwo;
+				this.outcome.winner = this.#teamTwo;
+				this.outcome.loser = this.#teamOne;
 				return;
 			}
 			else if( !teamTwoHasAliveUnits ) {
-				this.winner = this.#teamOne;
+				this.outcome.winner = this.#teamOne;
+				this.outcome.loser = this.#teamTwo;
 				return;
 			}
 
@@ -122,7 +133,6 @@ export class Game {
 			if( !firstAliveTeamOne || !firstAliveTeamTwo ) {
 				return;
 			}
-
 			// console.log( this.#teamOne.toString(), this.#teamTwo.toString());
 		}
 	}

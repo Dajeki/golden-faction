@@ -80,6 +80,7 @@ export class Unit {
 					unit.emit( Action.DIE, firstAlive );
 				}
 			});
+			console.log( `${ this.name } on team ${ this.team?.name } has died.` );
 		});
 
 		//Wire up Unit events to your items, buffs and debuffs
@@ -406,30 +407,24 @@ export class Druid extends Unit {
 }
 
 export class RavenousDog extends Unit {
-	damageTaken = 0;
-	lastHealth = this.stats.health;
 	isFrenzied = false;
+	frenzyPercent = .5;
 
 	constructor() {
 		super( "🐕 Ravenous Dog", 4, 6 );
 
 		//Frenzy
 		this.on( Action.END_OF_TURN, ( target ) => {
-			// if( this.stats.health < this.lastHealth ) {
-			// 	this.damageTaken += this.lastHealth - this.stats.health;
-			// }
-			if( Math.ceil( this.stats.health / this.currentHealth ) >= 2 && !this.isFrenzied ) {
+			if(( this.stats.health - this.currentHealth ) / this.stats.health >= this.frenzyPercent && !this.isFrenzied ) {
 				this.stats.add( Stat.ATTACK, 2 );
 				this.isFrenzied = true;
-				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.damageTaken } and only has ${ this.stats.health } gaining Frenzy stats.` );
+				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats.` );
 			}
-			else if( Math.ceil( this.stats.health / this.currentHealth ) < 2 && this.isFrenzied ) {
+			else if(( this.stats.health - this.currentHealth ) / this.stats.health < this.frenzyPercent && this.isFrenzied ) {
 				this.stats.subtract( Stat.ATTACK, 2, this );
 				this.isFrenzied = false;
-				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.damageTaken } and has ${ this.stats.health } losing Frenzy stats.` );
+				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and has ${ this.stats.health } losing Frenzy stats.` );
 			}
-			this.lastHealth = this.stats.health;
-
 		});
 
 		//Feeding Frenzy
@@ -450,8 +445,8 @@ export class Shaman extends Unit {
 		this.on( Action.START_OF_TURN, ( target ) => {
 			this?.team?.units.forEach( teammate => {
 				if( teammate.isDead ) return;
-				teammate.heal( 1 );
-				console.log( `${ this.name } on team ${ this.team?.name } Healing Aura has healed ${ teammate.name } for 1 health.` );
+				const effectiveHealing = teammate.heal( 1 );
+				console.log( `${ this.name } on team ${ this.team?.name } Healing Aura has healed ${ teammate.name } on team ${ this.team?.name } for ${ effectiveHealing } health.` );
 			});
 		});
 		//Ancestral Guidance
@@ -459,10 +454,10 @@ export class Shaman extends Unit {
 			if( !this.team || !this.team.units || this.hasAncestralGuidanced ) return;
 			for( const unit of this.team.units ) {
 				if( unit.isDead ) {
-					unit.heal( Math.ceil( unit.stats.health / 2 ));
+					const effectiveHealing = unit.heal( Math.ceil( unit.stats.health / 2 ));
 					this.hasAncestralGuidanced = true;
 					unit.isDead = false;
-					console.log( `${ this.name } on team ${ this.team?.name } resurrected ${ unit.name } with ${ Math.ceil( unit.stats.health / 2 ) } health.` );
+					console.log( `${ this.name } on team ${ this.team?.name } resurrected ${ unit.name } with ${ effectiveHealing } health.` );
 					return;
 				}
 			}
@@ -499,7 +494,7 @@ export class CorruptedWitch extends Unit {
 	curseChance = .5;
 	feedCoef = .5;
 	constructor() {
-		super( "🧹 Corrupted Witch", 6, 7 * 20 );
+		super( "🧹 Corrupted Witch", 6, 7 );
 
 		//Curse
 		this.on( Action.BEFORE_ATTACK, ( target ) => {
@@ -538,12 +533,14 @@ export class Mage extends Unit {
 			this.availableFireballRounds++;
 			if( this.availableFireballRounds % this.roundsToFireball ) return;
 
+			console.log( `${ this.name } on team ${ this.team?.name } casted fireball and gained +1 attack` );
 			//Arcane Mastery
 			this.stats.add( Stat.ATTACK, 1 );
 
 			target.team?.units.forEach(( enemy ) => {
 				if( enemy.isDead ) return;
-				enemy.hurt( Math.ceil( this.stats.attack * this.fireballCoef ), this );
+				const fireballDamage = enemy.hurt( Math.ceil( this.stats.attack * this.fireballCoef ), this );
+				console.log( `${ this.name } on team ${ this.team?.name } hit ${ enemy.name } on team ${ enemy.team?.name } for ${ fireballDamage } with fireball` );
 			});
 		});
 	}
@@ -608,10 +605,9 @@ export class Paladin extends Unit {
 // //Tier 4 Units
 
 export class OrcWarrior extends Unit {
-	hasReducedAttack: Unit[] = [];
 	origStatObj = this.stats;
 	constructor() {
-		super( "🪓 Orc Warrior", 7, 10 * 20 );
+		super( "🪓 Orc Warrior", 7, 10 );
 
 		//Bloodlust
 		this.on( Action.KILLED_UNIT, () => {
@@ -621,16 +617,9 @@ export class OrcWarrior extends Unit {
 			console.log( `${ this.name } on team ${ this.team?.name } and ${ teammatesAround?.behind?.name } on team ${ this.team?.name } gain +2 attack from ${ this.name } on team ${ this.team?.name }` );
 		});
 
-		this.on( Action.ATTACK, ( target ) => {
-			if( this.hasReducedAttack.includes( target )) {
-				target.hurt( 2, this );
-			}
-		});
-
-
 
 		//Overpower
-		//Proxy attack reduction from the stat on this unit to also increase the units health
+		//Proxy attack reduction from the stat on this unit to also increase the units attack
 		this.stats = new Proxy<Stats>( this.stats, {
 			get: function ( target: Stats, property: keyof Stats, receiver ) {
 				if( property === "subtract" ) {
@@ -638,7 +627,7 @@ export class OrcWarrior extends Unit {
 						target[property]( stat, amount, unitModifying );
 						if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
 							target.add( Stat.ATTACK, 2 );
-							console.log( `${ target.owner?.name } on team ${ target.owner?.team?.name } gain +2 because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced ${ target.owner?.name } on team ${ target.owner?.team?.name }` );
+							console.log( `${ target.owner?.name } on team ${ target.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
 						}
 					};
 				}
@@ -659,7 +648,7 @@ export class TimeKeeper extends Unit {
 	availableTimeWarpRounds = 0;
 	temporalShield = 0;
 	constructor() {
-		super( "⏰Time Keeper", 4, 9 );
+		super( "⏰ Time Keeper", 4, 9 );
 
 		//Time Warp
 		this.on( Action.AFTER_ATTACK, ( target ) => {
@@ -676,7 +665,7 @@ export class TimeKeeper extends Unit {
 		});
 
 		this.on( Action.START_OF_TURN, ( target ) => {
-			const temporalShieldGain =  Math.ceil( this.temporalShield * .1 );
+			const temporalShieldGain =  Math.ceil( this.stats.health * .1 );
 			this.temporalShield += temporalShieldGain;
 			console.log( `${ this.name } on team ${ this.team?.name }'s temporal shield gained ${ temporalShieldGain }` );
 		});
@@ -703,7 +692,7 @@ export class TimeKeeper extends Unit {
 
 		}
 		else {
-			console.log( `${ this.name } on team ${ this.team?.name }'s temporal shield blocked ${ overHit }` );
+			console.log( `${ this.name } on team ${ this.team?.name }'s temporal shield blocked ${ hurtAmount }` );
 			this.temporalShield = overHit;
 		}
 
@@ -723,5 +712,5 @@ export class TimeKeeper extends Unit {
 // export class Tinkerer extends Unit {
 // 	constructor() {
 // 		super( 3, 7 );
-// 	}
+
 // }
