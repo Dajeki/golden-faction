@@ -1,6 +1,6 @@
 import { Session } from "next-auth";
 import { headers } from "next/headers";
-import Providers from "@/components/Providers";
+import SessionContextProvider from "@/component/provider/SessionContextProvider";
 import React from "react";
 
 async function getSession( cookie: string ): Promise<Session> {
@@ -26,9 +26,9 @@ export default async function RootLayout({
       */ }
 			<head />
 			<body>
-				<Providers session={ session }>
+				<SessionContextProvider session={ session }>
 					{ children }
-				</Providers>
+				</SessionContextProvider>
 			</body>
 		</html>
 	);

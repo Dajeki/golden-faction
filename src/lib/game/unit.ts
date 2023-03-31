@@ -1,5 +1,5 @@
+import { UUID } from "bson";
 import EventEmitter from "node:events";
-import { PropertiesOnly } from "../propertiesOnly";
 import { Action } from "./action";
 import { AcidicConcoction, Bramble, Curse, Effect, ExplodingNettle, Headbutt, PoisonFangs, Rally, WebWrap } from "./effect";
 import { Item } from "./item";
@@ -19,6 +19,7 @@ export class Unit {
 	isCrowdControlled = false;
 	#team?: Team;
 	killer: Unit | null = null;
+	uuid;
 
 	_actions: EventEmitter = new EventEmitter();
 
@@ -27,6 +28,7 @@ export class Unit {
 		this.stats = new Stats( attack, health, def, crit, dodge, strikes );
 		this.currentHealth = health || 0;
 		this.stats.setOwner( this );
+		this.uuid = crypto.randomUUID();
 
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			this.isFirstAttack = false;
@@ -34,8 +36,18 @@ export class Unit {
 		});
 
 		this.on( Action.ATTACK, ( target ) => {
-			target.hurt( this.stats.attack, this );
-			console.log( `${ this.name } on team ${ this.team?.name } did ${ this.stats.attack } with basic attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
+			const effectiveDamage = target.hurt( this.stats.attack, this );
+			this.team?.game?.addGameStep(
+				this.name,
+				this.uuid,
+				"attack",
+				effectiveDamage,
+				Stat.HEALTH,
+				target.name,
+				target.uuid,
+				`${ this.name } on team ${ this.team?.name } did ${ effectiveDamage } with basic attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
+			);
+			console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveDamage } with basic attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
 		});
 
 		//fire off the After Unit Behind and Attack events after the unit attacks
@@ -80,13 +92,23 @@ export class Unit {
 					unit.emit( Action.DIE, firstAlive );
 				}
 			});
+			this.team?.game?.addGameStep(
+				this.name,
+				this.uuid,
+				"die",
+				0,
+				Stat.HEALTH,
+				this.name,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } has died.`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name } has died.` );
 		});
 
 		//Wire up Unit events to your items, buffs and debuffs
 		//They get the object they are on as the unit into the hadler
-		( Object.values( Action ) as ( keyof typeof Action )[] ).forEach( action => {
-			this.on( Action[action], () => {
+		Object.values( Action ).forEach( action => {
+			this.on( action, () => {
 				this.fireAttchmentEvents( Action[action] );
 			});
 		});
@@ -107,10 +129,11 @@ export class Unit {
 
 	once( event: Action, callback: ( target:Unit )=>void ) {
 		this._actions.once( event, callback );
+		// this._actions.prependOnceListener( event, callback );
 	}
 
 	emit( event: Action, ...eventInfo: [Unit, number?] ) {
-		if( this.isDead ) return;
+		if( !Action.DIE && this.isDead ) return;
 		//allow item, debuff, and buff to fire start of turn and end of turn if cced
 		if( this.isCrowdControlled ) {
 			if(
@@ -144,6 +167,14 @@ export class Unit {
 		if( debuffIndex < 0 ) return;
 		this.debuffs.splice( debuffIndex, 1 );
 		debuff.emit( Action.ON_REMOVE, this );
+	}
+
+	resurrect( percent = 1 ) {
+		if( this.isDead ) {
+			this.isDead = false;
+			return this.heal( Math.ceil( this.stats.health*percent ) + Math.abs( this.currentHealth ));
+		}
+		console.log( "Tried to res something that wasnt dead" );
 	}
 
 	heal( amount: number ) : number {
@@ -200,21 +231,21 @@ export class Unit {
 			this.items.length && i >= 0;
 			i--
 		) {
-			this.items[i].emit( Action[action], this );
+			this.items[i].emit( action, this );
 		}
 		for(
 			let i = this.buffs.length - 1;
 			this.buffs.length && i >= 0;
 			i--
 		) {
-			this.buffs[i].emit( Action[action], this );
+			this.buffs[i].emit( action, this );
 		}
 		for(
 			let i = this.debuffs.length - 1;
 			this.debuffs.length && i >= 0;
 			i--
 		) {
-			this.debuffs[i].emit( Action[action], this );
+			this.debuffs[i].emit( action, this );
 		}
 	}
 
@@ -245,6 +276,16 @@ export class Acolyte extends Unit {
 			const effectiveHeal = lowestHealthUnit.heal( healAmount );
 			this.totalAmountHealed += effectiveHeal;
 
+			this.team?.game?.addGameStep(
+				this.name,
+				this.uuid,
+				"healing_flame",
+				effectiveHeal,
+				Stat.HEALTH,
+				lowestHealthUnit.name,
+				lowestHealthUnit.uuid,
+				`${ this.name } on team ${ this.team?.name } healed ${ lowestHealthUnit.name } on team ${ this.team?.name } for ${ effectiveHeal }`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name } healed ${ lowestHealthUnit.name } on team ${ this.team?.name } for ${ effectiveHeal }` );
 		});
 
@@ -254,7 +295,17 @@ export class Acolyte extends Unit {
 				const extraDamage = Math.ceil( this.stats.attack * this.sancCoef );
 				target.hurt( extraDamage, this );
 
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.constructor.name } on team ${ this.team?.opposingTeam?.name }` );
+				this.team?.game?.addGameStep(
+					this.name,
+					this.uuid,
+					"sanctimonious_flame",
+					extraDamage,
+					Stat.HEALTH,
+					target.name,
+					target.uuid,
+					`${ this.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
 	}
@@ -303,6 +354,17 @@ export class Rogue extends Unit {
 			if( Math.random() >= this.sneakChance ) {
 				const sneakDamage = Math.ceil( this.stats.attack * this.sneakCoef );
 				target.hurt( sneakDamage, this );
+
+				this.team?.game?.addGameStep(
+					this.name,
+					this.uuid,
+					"sneak_attack",
+					sneakDamage,
+					Stat.HEALTH,
+					target.name,
+					target.uuid,
+					`${ this.name } on team ${ this.team?.name } did ${ sneakDamage } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } did ${ sneakDamage } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
@@ -311,6 +373,17 @@ export class Rogue extends Unit {
 			if( this.stats.attack * 2 < target.stats.health ) {
 				const backstabDamage = Math.ceil( this.stats.attack * this.backstabCoef );
 				target.hurt( backstabDamage, this );
+
+				this.team?.game?.addGameStep(
+					this.name,
+					this.uuid,
+					"sneak_attack",
+					backstabDamage,
+					Stat.HEALTH,
+					target.name,
+					target.uuid,
+					`${ this.name } on team ${ this.team?.name } did ${ backstabDamage } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } did ${ backstabDamage } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
@@ -328,12 +401,11 @@ export class Warrior extends Unit {
 			const targetNeighbor = target.team?.getAliveUnitAroundTarget( target );
 			if( !target.team ) return;
 
-
 			const cleaveDamage = Math.ceil( this.stats.attack * this.cleaveCoef );
 
 			if( targetNeighbor?.ahead ) {
 				targetNeighbor.ahead.hurt( cleaveDamage, this );
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ targetNeighbor?.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ targetNeighbor.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 			if( targetNeighbor?.behind ) {
@@ -454,9 +526,8 @@ export class Shaman extends Unit {
 			if( !this.team || !this.team.units || this.hasAncestralGuidanced ) return;
 			for( const unit of this.team.units ) {
 				if( unit.isDead ) {
-					const effectiveHealing = unit.heal( Math.ceil( unit.stats.health / 2 ));
+					const effectiveHealing = unit.resurrect( .5 );
 					this.hasAncestralGuidanced = true;
-					unit.isDead = false;
 					console.log( `${ this.name } on team ${ this.team?.name } resurrected ${ unit.name } with ${ effectiveHealing } health.` );
 					return;
 				}
@@ -523,7 +594,7 @@ export class CorruptedWitch extends Unit {
 
 export class Mage extends Unit {
 	fireballCoef = .1;
-	roundsToFireball = 3;
+	roundsToFireball = 5;
 	availableFireballRounds = 0;
 	constructor() {
 		super( "🪄 Mage", 7, 4 );
@@ -620,28 +691,39 @@ export class OrcWarrior extends Unit {
 
 		//Overpower
 		//Proxy attack reduction from the stat on this unit to also increase the units attack
-		this.stats = new Proxy<Stats>( this.stats, {
-			get: function ( target: Stats, property: keyof Stats, receiver ) {
-				if( property === "subtract" ) {
-					return function ( stat: keyof PropertiesOnly<Stats>, amount: number, unitModifying?: Unit ) {
-						target[property]( stat, amount, unitModifying );
-						if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
-							target.add( Stat.ATTACK, 2 );
-							console.log( `${ target.owner?.name } on team ${ target.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
-						}
-					};
+		// this.stats = new Proxy<Stats>( this.stats, {
+		// 	get: function ( target: Stats, property: keyof Stats, receiver ) {
+		// 		if( property === "subtract" ) {
+		// 			return function ( stat: keyof PropertiesOnly<Stats>, amount: number, unitModifying?: Unit ) {
+		// 				target[property]( stat, amount, unitModifying );
+		// 				if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
+		// 					target.add( Stat.ATTACK, 2 );
+		// 					console.log( `${ target.owner?.name } on team ${ target.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
+		// 				}
+		// 			};
+		// 		}
+		// 		const method = target[property];
+		// 		if( method && typeof method === "function" ) {
+		// 			return method.bind( target );
+		// 		}
+		// 		return target[property];
+		// 		// return Reflect.get( target, property, receiver );
+		// 	},
+		// });
+
+		const origSubtract = this.stats.subtract;
+		this.stats.subtract = function ( stat: Stat, amount: number, unitModifying: Unit ) {
+			if( stat === Stat.ATTACK ) {
+				if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
+
+					this.add( Stat.ATTACK, 2 );
+					console.log( `${ this.owner?.name } on team ${ this.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
 				}
-				const method = target[property];
-				if( method && typeof method === "function" ) {
-					return method.bind( target );
-				}
-				return target[property];
-				// return Reflect.get( target, property, receiver );
-			},
-		});
+			}
+			origSubtract.call( this, stat, amount, unitModifying );
+		};
 	}
 }
-
 
 export class TimeKeeper extends Unit {
 	roundsToTimeWarp = 4;
@@ -661,6 +743,17 @@ export class TimeKeeper extends Unit {
 		//Temporal Shield
 		this.on( Action.BEFORE_GAME, () => {
 			this.temporalShield = Math.ceil( this.stats.health * .5 );
+
+			this.team?.game?.addBeforeGameStep(
+				this.name,
+				this.uuid,
+				"temporal_shield",
+				this.temporalShield,
+				"shield",
+				this.name,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } has gained a temporal shield for ${ this.temporalShield }`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name } has gained a temporal shield for ${ this.temporalShield }` );
 		});
 

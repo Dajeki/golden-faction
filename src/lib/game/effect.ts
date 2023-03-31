@@ -95,6 +95,7 @@ export class Rally extends Effect {
 	warriorUnits = ["💪 Warrior", "🪓 Orc Warrior", "🛡️ Paladin", "🐂 Minotaur"];
 	lastNumberOfWarriors = 0;
 	rallyCoef = .3;
+	lastAttackChange = 0;
 	constructor( caster: Unit ) {
 		super( "Rally", caster );
 
@@ -111,12 +112,37 @@ export class Rally extends Effect {
 			const warriorDIfference = this.lastNumberOfWarriors - numberOfWarriors;
 			this.lastNumberOfWarriors = numberOfWarriors;
 			this.caster.stats.subtract( Stat.ATTACK, Math.round( warriorDIfference * caster.stats.attack * this.rallyCoef ));
+			this.lastAttackChange = warriorDIfference * -1;
 			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ warriorDIfference * -1 }` );
 		};
 
-		this.on( Action.BEFORE_GAME, rallyHandler );
+		this.on( Action.BEFORE_GAME, ( target ) => {
+			rallyHandler( target );
+			this.caster.team?.game?.addBeforeGameStep(
+				this.caster.name,
+				this.caster.uuid,
+				this.name,
+				this.lastAttackChange,
+				Stat.ATTACK,
+				this.caster.name,
+				this.caster.uuid,
+				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
+			);
+		});
 		//Repeat process on the end of every turn.
-		this.on( Action.END_OF_TURN, rallyHandler );
+		this.on( Action.END_OF_TURN, ( target ) => {
+			rallyHandler( target );
+			this.caster.team?.game?.addBeforeGameStep(
+				this.caster.name,
+				this.caster.uuid,
+				this.name,
+				this.lastAttackChange,
+				Stat.ATTACK,
+				this.caster.name,
+				this.caster.uuid,
+				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
+			);
+		});
 	}
 }
 
@@ -169,6 +195,7 @@ export class ExplodingNettle extends Effect {
 		this.on( Action.ON_ADD, ( target ) => {
 			//die event gets the first alive enemy unit
 			target.once( Action.DIE, ( EnemyTarget ) => {
+				console.log( "Fired Exploding Nettle from Death" );
 				const unitsAround = target.team?.getAliveUnitAroundTarget( target );
 				unitsAround?.behind?.addDebuff( new ExplodingNettle( caster ));
 				console.log( `${ target.name } died so ${ this.name } moved to ${ unitsAround?.behind?.name } with duration ${ this.duration }` );

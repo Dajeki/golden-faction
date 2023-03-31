@@ -41,7 +41,7 @@ export class Team {
 		this.units.splice( position, 0, unit );
 	}
 	removeUnit( unit: Unit ) {
-		this.units.splice( this.units.findIndex(( teamUnit ) => teamUnit === unit ) - 1, 1 );
+		this.units.splice( this.units.findIndex(( teamUnit ) => teamUnit === unit ), 1 );
 	}
 
 	findLowestHealthUnit() {
@@ -105,6 +105,7 @@ export class Team {
 			}
 			if( this.units[targetAfterIndex].isDead ) {
 				targetAfterIndex++;
+				continue;
 			}
 			targetAfter = this.units[targetAfterIndex];
 

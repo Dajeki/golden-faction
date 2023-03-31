@@ -1,5 +1,21 @@
 import { Action } from "./action";
+import { Stat } from "./stats";
 import { Team } from "./team";
+
+export interface GameAction {
+	name: string;
+	uuid: string;
+	action: {
+		name: string;
+		amount: number;
+		stat: string;
+	};
+	target: {
+		name: string;
+		uuid: string;
+	},
+	text: string;
+}
 
 export class Game {
 	#round = 0;
@@ -12,6 +28,11 @@ export class Game {
 			winner: null,
 			loser : null,
 		};
+
+	beforeGameStep: GameAction[] = [];
+	//first index is the turn second index is the action the units take
+	gameSteps: GameAction[][] = [];
+
 	constructor( teamOne: Team, teamTwo: Team, round: number ) {
 		this.#teamOne = teamOne;
 		this.#teamOne.game = this;
@@ -20,6 +41,59 @@ export class Game {
 		this.#round = round;
 
 		this.run();
+	}
+
+	addBeforeGameStep(
+		name: string,
+		uuid: string,
+		actionName: string,
+		actionAmount: number,
+		actionStat: string,
+		targetName: string,
+		targetUuid: string,
+		text: string,
+	) {
+		this.beforeGameStep.push({
+			name,
+			uuid,
+			action: {
+				name  : actionName,
+				amount: actionAmount,
+				stat  : actionStat,
+			},
+			target: {
+				name: targetName,
+				uuid: targetUuid,
+			},
+			text: text,
+		});
+	}
+
+	addGameStep(
+		name: string,
+		uuid: string,
+		actionName: string,
+		actionAmount: number,
+		actionStat: string,
+		targetName: string,
+		targetUuid: string,
+		text: string,
+	) {
+		//The array for adding the round will be available at the beggining of inside the loop
+		this.gameSteps[this.#round-1].push({
+			name,
+			uuid,
+			action: {
+				name  : actionName,
+				amount: actionAmount,
+				stat  : actionStat,
+			},
+			target: {
+				name: targetName,
+				uuid: targetUuid,
+			},
+			text: text,
+		});
 	}
 
 	get round() {
@@ -39,6 +113,7 @@ export class Game {
 		if( !firstAliveTeamOne || !firstAliveTeamTwo ) {
 			return;
 		}
+
 		//both of these are definitely not undefined. There is a return outside the while loop and one at the end of this loop to catch it
 		this.#teamOne.units.forEach(( unit, indx ) => {
 			unit.emit( Action.BEFORE_GAME, firstAliveTeamTwo! );
@@ -46,9 +121,12 @@ export class Game {
 		this.#teamTwo.units.forEach(( unit, indx ) => {
 			unit.emit( Action.BEFORE_GAME, firstAliveTeamOne! );
 		});
+
+		//REFACTOR rewrite this async with setInterval so that the loop can run if something else needs to.
 		// eslint-disable-next-line no-constant-condition
 		while( true && this.#round <= 600 ) {
 			console.log( `START OF ROUND: ${ this.#round }` );
+			this.gameSteps.push( [] as GameAction[] );
 			this.#round++;
 
 			this.#teamOne.units.forEach(( unit, indx ) => {
@@ -95,6 +173,17 @@ export class Game {
 					unit.isDead = true;
 					unit.killer?.emit( Action.KILLED_UNIT, unit );
 					unit.emit( Action.DIE, firstAliveTeamTwo! );
+
+					this.addGameStep(
+						unit.killer?.name || "",
+						unit.killer?.uuid || "",
+						Action.KILLED_UNIT,
+						0,
+						Stat.HEALTH,
+						unit.name,
+						unit.uuid,
+						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
+					);
 					console.log( `${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }` );
 				}
 			});
@@ -103,6 +192,16 @@ export class Game {
 					unit.isDead = true;
 					unit.killer?.emit( Action.KILLED_UNIT, unit );
 					unit.emit( Action.DIE, firstAliveTeamOne! );
+					this.addGameStep(
+						unit.killer?.name || "",
+						unit.killer?.uuid || "",
+						Action.KILLED_UNIT,
+						0,
+						Stat.HEALTH,
+						unit.name,
+						unit.uuid,
+						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
+					);
 					console.log( `${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }` );
 				}
 			});
