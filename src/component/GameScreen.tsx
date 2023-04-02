@@ -6,7 +6,7 @@ import { CorruptedWitch, OrcWarrior } from "@/lib/game/unit";
 
 export default function GameScreen() {
 	//call game function here
-	//GET THIS FROM FETCHING DATA!!!!
+	//GET TEAMS FROM FETCHING DATA!!!!
 	//const teamOne = new Team( "Dan", new LargeSpider(), new Warrior(), new Acolyte(), new Rogue(), new Shaman(), new Watcher(), new Druid(), new Alchemist(), new RavenousDog(), new Paladin(), new Mage(), new Minotaur(), new CorruptedWitch(), new OrcWarrior(), new TimeKeeper());
 	//const teamTwo = new Team( "Lunarix", new Rogue(), new Warrior(), new LargeSpider(), new Acolyte(), new Alchemist(), new Watcher(), new Shaman(), new RavenousDog(), new Druid(), new Minotaur(), new Mage(), new CorruptedWitch(), new Paladin(), new TimeKeeper(), new OrcWarrior());
 
@@ -22,7 +22,6 @@ export default function GameScreen() {
 	console.log( `The losing is ${ game.outcome.loser }` );
 
 	const mockGameInfo : GameAction = {
-		name  : "warrior",
 		uuid  : crypto.randomUUID(),
 		action: {
 			name  : "attack",
@@ -30,7 +29,6 @@ export default function GameScreen() {
 			stat  : Stat.HEALTH,
 		},
 		target: {
-			name: "acolyte",
 			uuid: crypto.randomUUID(),
 		},
 		text: "hello",

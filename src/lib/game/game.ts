@@ -3,7 +3,6 @@ import { Stat } from "./stats";
 import { Team } from "./team";
 
 export interface GameAction {
-	name: string;
 	uuid: string;
 	action: {
 		name: string;
@@ -11,7 +10,6 @@ export interface GameAction {
 		stat: string;
 	};
 	target: {
-		name: string;
 		uuid: string;
 	},
 	text: string;
@@ -44,17 +42,14 @@ export class Game {
 	}
 
 	addBeforeGameStep(
-		name: string,
 		uuid: string,
 		actionName: string,
 		actionAmount: number,
 		actionStat: string,
-		targetName: string,
 		targetUuid: string,
 		text: string,
 	) {
 		this.beforeGameStep.push({
-			name,
 			uuid,
 			action: {
 				name  : actionName,
@@ -62,7 +57,6 @@ export class Game {
 				stat  : actionStat,
 			},
 			target: {
-				name: targetName,
 				uuid: targetUuid,
 			},
 			text: text,
@@ -70,18 +64,15 @@ export class Game {
 	}
 
 	addGameStep(
-		name: string,
 		uuid: string,
 		actionName: string,
 		actionAmount: number,
 		actionStat: string,
-		targetName: string,
 		targetUuid: string,
 		text: string,
 	) {
 		//The array for adding the round will be available at the beggining of inside the loop
 		this.gameSteps[this.#round-1].push({
-			name,
 			uuid,
 			action: {
 				name  : actionName,
@@ -89,7 +80,6 @@ export class Game {
 				stat  : actionStat,
 			},
 			target: {
-				name: targetName,
 				uuid: targetUuid,
 			},
 			text: text,
@@ -175,12 +165,10 @@ export class Game {
 					unit.emit( Action.DIE, firstAliveTeamTwo! );
 
 					this.addGameStep(
-						unit.killer?.name || "",
 						unit.killer?.uuid || "",
 						Action.KILLED_UNIT,
 						0,
 						Stat.HEALTH,
-						unit.name,
 						unit.uuid,
 						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
 					);
@@ -193,12 +181,10 @@ export class Game {
 					unit.killer?.emit( Action.KILLED_UNIT, unit );
 					unit.emit( Action.DIE, firstAliveTeamOne! );
 					this.addGameStep(
-						unit.killer?.name || "",
 						unit.killer?.uuid || "",
 						Action.KILLED_UNIT,
 						0,
 						Stat.HEALTH,
-						unit.name,
 						unit.uuid,
 						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
 					);

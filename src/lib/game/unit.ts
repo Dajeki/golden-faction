@@ -38,12 +38,10 @@ export class Unit {
 		this.on( Action.ATTACK, ( target ) => {
 			const effectiveDamage = target.hurt( this.stats.attack, this );
 			this.team?.game?.addGameStep(
-				this.name,
 				this.uuid,
 				"attack",
-				effectiveDamage,
+				-effectiveDamage,
 				Stat.HEALTH,
-				target.name,
 				target.uuid,
 				`${ this.name } on team ${ this.team?.name } did ${ effectiveDamage } with basic attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 			);
@@ -74,6 +72,15 @@ export class Unit {
 
 		//when a unit dies, it can kill other targets with on death damage, so we need to loop through and make sure to check and fire anything that has died from the units death.
 		this.on( Action.DIE, ( target ) => {
+			this.team?.game?.addGameStep(
+				this.uuid,
+				"die",
+				0,
+				Stat.HEALTH,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } has died.`,
+			);
+			console.log( `${ this.name } on team ${ this.team?.name } has died.` );
 			this.team?.units.forEach( unit => {
 				if( !unit.isDead && unit.currentHealth <= 0 ) {
 					unit.isDead = true;
@@ -92,24 +99,13 @@ export class Unit {
 					unit.emit( Action.DIE, firstAlive );
 				}
 			});
-			this.team?.game?.addGameStep(
-				this.name,
-				this.uuid,
-				"die",
-				0,
-				Stat.HEALTH,
-				this.name,
-				this.uuid,
-				`${ this.name } on team ${ this.team?.name } has died.`,
-			);
-			console.log( `${ this.name } on team ${ this.team?.name } has died.` );
 		});
 
 		//Wire up Unit events to your items, buffs and debuffs
 		//They get the object they are on as the unit into the hadler
 		Object.values( Action ).forEach( action => {
-			this.on( action, () => {
-				this.fireAttchmentEvents( Action[action] );
+			this.on( action, ( target ) => {
+				this.fireAttchmentEvents( Action[action], target );
 			});
 		});
 	}
@@ -122,17 +118,17 @@ export class Unit {
 		return this.#team;
 	}
 
-	on( event: Action, callback: ( target:Unit, damage?:number )=>void ) {
+	on( event: Action, callback: ( target:Unit, firstAlive: Unit, damage?:number )=>void ) {
 		//this._actions.prependListener( event, callback );
 		this._actions.on( event, callback );
 	}
 
-	once( event: Action, callback: ( target:Unit )=>void ) {
+	once( event: Action, callback: ( target:Unit, firstAlive: Unit, damage?:number )=>void ) {
 		this._actions.once( event, callback );
 		// this._actions.prependOnceListener( event, callback );
 	}
 
-	emit( event: Action, ...eventInfo: [Unit, number?] ) {
+	emit( event: Action, ...eventInfo: [Unit, Unit?, number?] ) {
 		if( !Action.DIE && this.isDead ) return;
 		//allow item, debuff, and buff to fire start of turn and end of turn if cced
 		if( this.isCrowdControlled ) {
@@ -140,7 +136,7 @@ export class Unit {
 				event === Action.START_OF_TURN ||
 				event === Action.END_OF_TURN
 			) {
-				this.fireAttchmentEvents( event );
+				this.fireAttchmentEvents( event, eventInfo[1] );
 			}
 			if( this.isCrowdControlled ) return;
 		}
@@ -195,20 +191,21 @@ export class Unit {
 	}
 
 	hurt( amount: number, attacker: Unit ) {
-		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, amount );
+		const firstAliveEnemy = this.team?.opposingTeam?.findFirstAliveUnit();
+		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, firstAliveEnemy, amount );
 
 		const wasAlive = this.currentHealth > 0;
 		const hurtAmount = amount - Math.ceil( amount * ( this.stats.def/100 ));
 		this.currentHealth -= hurtAmount;
-		attacker.emit( Action.DEALT_DAMAGE, this, hurtAmount );
+		attacker.emit( Action.DEALT_DAMAGE, this, firstAliveEnemy, hurtAmount );
 		const isDead = this.currentHealth <= 0;
 
 		if( wasAlive && isDead && attacker ) {
 			this.killer = attacker;
 		}
-		this.emit( Action.AFTER_TAKE_DAMAGE, attacker, amount );
+		this.emit( Action.AFTER_TAKE_DAMAGE, attacker, firstAliveEnemy, amount );
 		if( this.isFirstDamageTaken ) {
-			this.emit( Action.FIRST_TAKE_DAMAGE, this, amount );
+			this.emit( Action.FIRST_TAKE_DAMAGE, this, firstAliveEnemy, amount );
 			this.isFirstDamageTaken = false;
 		}
 		return hurtAmount;
@@ -225,27 +222,27 @@ export class Unit {
 		return hurtAmount;
 	}
 
-	fireAttchmentEvents( action: Action ) {
+	fireAttchmentEvents( action: Action, firstAlive?: Unit ) {
 		for(
 			let i = this.items.length - 1;
 			this.items.length && i >= 0;
 			i--
 		) {
-			this.items[i].emit( action, this );
+			this.items[i].emit( action, this, firstAlive );
 		}
 		for(
 			let i = this.buffs.length - 1;
 			this.buffs.length && i >= 0;
 			i--
 		) {
-			this.buffs[i].emit( action, this );
+			this.buffs[i].emit( action, this, firstAlive );
 		}
 		for(
 			let i = this.debuffs.length - 1;
 			this.debuffs.length && i >= 0;
 			i--
 		) {
-			this.debuffs[i].emit( action, this );
+			this.debuffs[i].emit( action, this, firstAlive );
 		}
 	}
 
@@ -277,12 +274,10 @@ export class Acolyte extends Unit {
 			this.totalAmountHealed += effectiveHeal;
 
 			this.team?.game?.addGameStep(
-				this.name,
 				this.uuid,
 				"healing_flame",
 				effectiveHeal,
 				Stat.HEALTH,
-				lowestHealthUnit.name,
 				lowestHealthUnit.uuid,
 				`${ this.name } on team ${ this.team?.name } healed ${ lowestHealthUnit.name } on team ${ this.team?.name } for ${ effectiveHeal }`,
 			);
@@ -293,19 +288,17 @@ export class Acolyte extends Unit {
 		this.on( Action.ATTACK, ( target ) => {
 			if( this.totalAmountHealed > target.stats.health ) {
 				const extraDamage = Math.ceil( this.stats.attack * this.sancCoef );
-				target.hurt( extraDamage, this );
+				const effectiveSFlame = target.hurt( extraDamage, this );
 
 				this.team?.game?.addGameStep(
-					this.name,
 					this.uuid,
 					"sanctimonious_flame",
-					extraDamage,
+					-effectiveSFlame,
 					Stat.HEALTH,
-					target.name,
 					target.uuid,
-					`${ this.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveSFlame } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ extraDamage } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveSFlame } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 		});
 	}
@@ -353,17 +346,15 @@ export class Rogue extends Unit {
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			if( Math.random() >= this.sneakChance ) {
 				const sneakDamage = Math.ceil( this.stats.attack * this.sneakCoef );
-				target.hurt( sneakDamage, this );
+				const effectiveSneak = target.hurt( sneakDamage, this );
 
 				this.team?.game?.addGameStep(
-					this.name,
 					this.uuid,
 					"sneak_attack",
-					sneakDamage,
+					-effectiveSneak,
 					Stat.HEALTH,
-					target.name,
 					target.uuid,
-					`${ this.name } on team ${ this.team?.name } did ${ sneakDamage } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveSneak } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
 				console.log( `${ this.name } on team ${ this.team?.name } did ${ sneakDamage } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
@@ -372,17 +363,15 @@ export class Rogue extends Unit {
 		this.on( Action.ATTACK, ( target ) => {
 			if( this.stats.attack * 2 < target.stats.health ) {
 				const backstabDamage = Math.ceil( this.stats.attack * this.backstabCoef );
-				target.hurt( backstabDamage, this );
+				const effectiveBackstab = target.hurt( backstabDamage, this );
 
 				this.team?.game?.addGameStep(
-					this.name,
 					this.uuid,
-					"sneak_attack",
-					backstabDamage,
+					"backstab",
+					-effectiveBackstab,
 					Stat.HEALTH,
-					target.name,
 					target.uuid,
-					`${ this.name } on team ${ this.team?.name } did ${ backstabDamage } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveBackstab } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
 				console.log( `${ this.name } on team ${ this.team?.name } did ${ backstabDamage } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
@@ -404,13 +393,30 @@ export class Warrior extends Unit {
 			const cleaveDamage = Math.ceil( this.stats.attack * this.cleaveCoef );
 
 			if( targetNeighbor?.ahead ) {
-				targetNeighbor.ahead.hurt( cleaveDamage, this );
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ targetNeighbor.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
+				const effectiveCleave = targetNeighbor.ahead.hurt( cleaveDamage, this );
+
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"cleave",
+					-effectiveCleave,
+					Stat.HEALTH,
+					targetNeighbor.ahead.uuid,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Cleave to ${ targetNeighbor.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 			if( targetNeighbor?.behind ) {
-				targetNeighbor.behind.hurt( cleaveDamage, this );
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ cleaveDamage } with Cleave to ${ targetNeighbor.behind.name } on team ${ this.team?.opposingTeam?.name }` );
+				const effectiveCleave = targetNeighbor.behind.hurt( cleaveDamage, this );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"cleave",
+					-effectiveCleave,
+					Stat.HEALTH,
+					targetNeighbor.behind.uuid,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Cleave to ${ targetNeighbor.behind.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 		});
@@ -434,11 +440,27 @@ export class Alchemist extends Unit {
 			if( !neighbor ) return;
 			if( neighbor.ahead ) {
 				const effectiveHeal = neighbor.ahead.heal( healAmount );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"healing_mist",
+					effectiveHeal,
+					Stat.HEALTH,
+					neighbor.ahead.uuid,
+					`${ this.name } on team ${ this.team?.name } healed ${ neighbor?.ahead.name } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } healed ${ neighbor?.ahead.name } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist` );
 			}
 
 			if( neighbor.behind ) {
 				const effectiveHeal = neighbor.behind.heal( healAmount );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"healing_mist",
+					effectiveHeal,
+					Stat.HEALTH,
+					neighbor.behind.uuid,
+					`${ this.name } on team ${ this.team?.name } healed ${ neighbor?.behind.name  } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } healed ${ neighbor?.behind.name } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist` );
 			}
 		});
@@ -481,6 +503,7 @@ export class Druid extends Unit {
 export class RavenousDog extends Unit {
 	isFrenzied = false;
 	frenzyPercent = .5;
+	frenzyAmount = 2;
 
 	constructor() {
 		super( "🐕 Ravenous Dog", 4, 6 );
@@ -488,20 +511,52 @@ export class RavenousDog extends Unit {
 		//Frenzy
 		this.on( Action.END_OF_TURN, ( target ) => {
 			if(( this.stats.health - this.currentHealth ) / this.stats.health >= this.frenzyPercent && !this.isFrenzied ) {
-				this.stats.add( Stat.ATTACK, 2 );
+				this.stats.add( Stat.ATTACK, this.frenzyAmount );
 				this.isFrenzied = true;
-				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats.` );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"add_frenzy",
+					this.frenzyAmount,
+					Stat.ATTACK,
+					this.uuid,
+					`${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats` );
 			}
 			else if(( this.stats.health - this.currentHealth ) / this.stats.health < this.frenzyPercent && this.isFrenzied ) {
-				this.stats.subtract( Stat.ATTACK, 2, this );
+				this.stats.subtract( Stat.ATTACK, this.frenzyAmount, this );
 				this.isFrenzied = false;
-				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and has ${ this.stats.health } losing Frenzy stats.` );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"remove_frenzy",
+					-this.frenzyAmount,
+					Stat.ATTACK,
+					this.uuid,
+					`${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and has ${ this.stats.health } losing Frenzy stats` );
 			}
 		});
 
 		//Feeding Frenzy
 		this.on( Action.KILLED_UNIT, ( target ) => {
+			this.team?.game?.addGameStep(
+				this.uuid,
+				"feeding_frenzy",
+				1,
+				Stat.ATTACK,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } killed ${ target.name } on team ${ this.team?.opposingTeam?.name } and gained +1 attack`,
+			);
 			this.stats.add( Stat.ATTACK, 1 );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				"feeding_frenzy",
+				1,
+				Stat.HEALTH,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } killed ${ target.name } on team ${ this.team?.opposingTeam?.name } and gained +1 health`,
+			);
 			this.stats.add( Stat.HEALTH, 1 );
 			console.log( `${ this.name } on team ${ this.team?.name } killed ${ target.name } on team ${ this.team?.opposingTeam?.name } and gained +1 attack and +1 health` );
 		});
@@ -518,19 +573,33 @@ export class Shaman extends Unit {
 			this?.team?.units.forEach( teammate => {
 				if( teammate.isDead ) return;
 				const effectiveHealing = teammate.heal( 1 );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"healing_aura",
+					effectiveHealing,
+					Stat.HEALTH,
+					teammate.uuid,
+					`${ this.name } on team ${ this.team?.name } Healing Aura has healed ${ teammate.name } on team ${ this.team?.name } for ${ effectiveHealing } health.`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } Healing Aura has healed ${ teammate.name } on team ${ this.team?.name } for ${ effectiveHealing } health.` );
 			});
 		});
 		//Ancestral Guidance
 		this.on( Action.START_OF_TURN, () => {
 			if( !this.team || !this.team.units || this.hasAncestralGuidanced ) return;
-			for( const unit of this.team.units ) {
-				if( unit.isDead ) {
-					const effectiveHealing = unit.resurrect( .5 );
-					this.hasAncestralGuidanced = true;
-					console.log( `${ this.name } on team ${ this.team?.name } resurrected ${ unit.name } with ${ effectiveHealing } health.` );
-					return;
-				}
+			for( const teammate of this.team.units ) {
+				if( !teammate.isDead ) return;
+				const effectiveHealing = teammate.resurrect( .5 );
+				this.hasAncestralGuidanced = true;
+				this.team?.game?.addGameStep(
+					this.uuid,
+					"ancestral_guidance",
+					effectiveHealing || 0,
+					Stat.HEALTH,
+					teammate.uuid,
+					`${ this.name } on team ${ this.team?.name } resurrected ${ teammate.name } on team ${ this.team?.name } with ${ effectiveHealing }`,
+				);
+				console.log( `${ this.name } on team ${ this.team?.name } resurrected ${ teammate.name } on team ${ this.team?.name } with ${ effectiveHealing }` );
 			}
 		});
 	}
@@ -546,11 +615,33 @@ export class Watcher extends Unit {
 		this.on( Action.AFTER_ATTACK, ( target ) => {
 			if( target.stats.attack <= 0 || this.hasStaredDown ) return;
 
+			this.team?.game?.addGameStep(
+				this.uuid,
+				"stare_down",
+				this.stareDownReduc,
+				Stat.ATTACK,
+				target.uuid,
+				`${ this.name } on team ${ this.team?.name } used stare down and reduced ${ target?.name } on team ${ this.team?.opposingTeam?.name }'s attack by ${ this.stareDownReduc }`,
+			);
 			target.stats.subtract( Stat.ATTACK, this.stareDownReduc, this );
 			this.hasStaredDown = true;
 
+
+			const unitBehind = target.team?.getAliveUnitAroundTarget( target )?.behind;
+			let unitTwoBehind: Unit | null | undefined;
+			if( unitBehind ) {
+				unitTwoBehind = target.team?.getAliveUnitAroundTarget(  unitBehind ).behind;
+			}
+			this.team?.game?.addGameStep(
+				this.uuid,
+				"visionary_increase",
+				this.stareDownReduc,
+				Stat.ATTACK,
+				target.uuid,
+				`${ this.name } on team ${ this.team?.name } used stare down and reduced ${ target?.name } on team ${ this.team?.opposingTeam?.name }'s attack by ${ this.stareDownReduc }`,
+			);
 			//Visionary Increase
-			target.team?.getAliveUnitAroundTarget( target )?.behind?.stats.subtract( Stat.ATTACK, this.stareDownReduc, this );
+			unitTwoBehind?.stats.subtract( Stat.ATTACK, this.stareDownReduc, this );
 
 		});
 		this.on( Action.START_OF_TURN, ( target ) => {
@@ -582,7 +673,7 @@ export class CorruptedWitch extends Unit {
 		});
 
 		//Feed Off Suffering
-		this.on( Action.DEALT_DAMAGE, ( target, amountDone ) => {
+		this.on( Action.DEALT_DAMAGE, ( target, firstAliveEnemy, amountDone ) => {
 			if( !amountDone ) return;
 			const healAmount = Math.ceil( amountDone * this.feedCoef );
 			this.heal( healAmount );
@@ -649,7 +740,7 @@ export class Paladin extends Unit {
 		super( "🛡️ Paladin", 5, 8 );
 
 		//Divine Recoil
-		this.on( Action.AFTER_TAKE_DAMAGE, ( attacker, damage = 0 ) => {
+		this.on( Action.AFTER_TAKE_DAMAGE, ( attacker, _, damage = 0 ) => {
 			attacker.hurtWithReflect( Math.ceil( damage * this.recoilCoef ), this );
 
 			console.log( `${ this.name } on team ${ this.team?.name } reflected back damage to ${ attacker.name } on team ${ attacker.team?.name } for ${ Math.ceil( damage * this.recoilCoef ) }` );
@@ -690,27 +781,6 @@ export class OrcWarrior extends Unit {
 
 
 		//Overpower
-		//Proxy attack reduction from the stat on this unit to also increase the units attack
-		// this.stats = new Proxy<Stats>( this.stats, {
-		// 	get: function ( target: Stats, property: keyof Stats, receiver ) {
-		// 		if( property === "subtract" ) {
-		// 			return function ( stat: keyof PropertiesOnly<Stats>, amount: number, unitModifying?: Unit ) {
-		// 				target[property]( stat, amount, unitModifying );
-		// 				if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
-		// 					target.add( Stat.ATTACK, 2 );
-		// 					console.log( `${ target.owner?.name } on team ${ target.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
-		// 				}
-		// 			};
-		// 		}
-		// 		const method = target[property];
-		// 		if( method && typeof method === "function" ) {
-		// 			return method.bind( target );
-		// 		}
-		// 		return target[property];
-		// 		// return Reflect.get( target, property, receiver );
-		// 	},
-		// });
-
 		const origSubtract = this.stats.subtract;
 		this.stats.subtract = function ( stat: Stat, amount: number, unitModifying: Unit ) {
 			if( stat === Stat.ATTACK ) {
@@ -733,9 +803,19 @@ export class TimeKeeper extends Unit {
 		super( "⏰ Time Keeper", 4, 9 );
 
 		//Time Warp
+		//REFACTOR Use the strike modifier to have this happen.
 		this.on( Action.AFTER_ATTACK, ( target ) => {
 			this.availableTimeWarpRounds++;
 			if( this.availableTimeWarpRounds % this.roundsToTimeWarp ) return;
+
+			this.team?.game?.addBeforeGameStep(
+				this.uuid,
+				"time_warp",
+				1,
+				"strikes",
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } has warped time attacking again this turn`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name } has warped time attacking again this turn` );
 			this.emit( Action.ATTACK, target );
 		});
@@ -745,12 +825,10 @@ export class TimeKeeper extends Unit {
 			this.temporalShield = Math.ceil( this.stats.health * .5 );
 
 			this.team?.game?.addBeforeGameStep(
-				this.name,
 				this.uuid,
 				"temporal_shield",
 				this.temporalShield,
 				"shield",
-				this.name,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } has gained a temporal shield for ${ this.temporalShield }`,
 			);
@@ -760,6 +838,15 @@ export class TimeKeeper extends Unit {
 		this.on( Action.START_OF_TURN, ( target ) => {
 			const temporalShieldGain =  Math.ceil( this.stats.health * .1 );
 			this.temporalShield += temporalShieldGain;
+
+			this.team?.game?.addBeforeGameStep(
+				this.uuid,
+				"temporal_shield",
+				temporalShieldGain,
+				"shield",
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name }'s temporal shield gained ${ temporalShieldGain }`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name }'s temporal shield gained ${ temporalShieldGain }` );
 		});
 	}
@@ -769,23 +856,44 @@ export class TimeKeeper extends Unit {
    	*	Health is taken from temporal shield first. Mitigating damage with shield does not fire attackers DAMAGE_DEALT event.
    	*/
 	hurt( amount: number, attacker: Unit ): number {
-		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, amount );
+		const firstAlive = this.team?.findFirstAliveUnit();
+		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, firstAlive, amount );
 
 		const wasAlive = this.currentHealth > 0;
-		const hurtAmount = amount - Math.ceil( amount * ( this.stats.def / 100 ));
+		let hurtAmount = amount - Math.ceil( amount * ( this.stats.def / 100 ));
 
 		const overHit = this.temporalShield - hurtAmount;
 		if( overHit < 0 ) {
 
+			this.team?.game?.addBeforeGameStep(
+				this.uuid,
+				"temporal_shield",
+				-this.temporalShield,
+				"shield",
+				this.uuid,
+				`${ this.name }'s on team ${ this.team?.name }'s temporal shield blocked ${ this.temporalShield } and had the rest taken as health`,
+			);
 			console.log( `${ this.name }'s on team ${ this.team?.name }'s temporal shield blocked ${ this.temporalShield } and had ${ -overHit } taken from health` );
 			this.temporalShield = 0;
+
+			hurtAmount = -overHit;
 			//this is going to be negative for any damage done over temporal shield. Adding it will subtract from current health
 			this.currentHealth += overHit;
-			attacker.emit( Action.DEALT_DAMAGE, this, hurtAmount );
+			attacker.emit( Action.DEALT_DAMAGE, this, firstAlive, hurtAmount );
 
 		}
 		else {
+			this.team?.game?.addBeforeGameStep(
+				this.uuid,
+				"temporal_shield",
+				-this.temporalShield,
+				"shield",
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name }'s temporal shield blocked ${ hurtAmount }`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name }'s temporal shield blocked ${ hurtAmount }` );
+
+			hurtAmount = 0;
 			this.temporalShield = overHit;
 		}
 
@@ -793,9 +901,9 @@ export class TimeKeeper extends Unit {
 		if( wasAlive && isDead && attacker ) {
 			this.killer = attacker;
 		}
-		this.emit( Action.AFTER_TAKE_DAMAGE, attacker, hurtAmount );
+		this.emit( Action.AFTER_TAKE_DAMAGE, attacker, firstAlive, hurtAmount );
 		if( this.isFirstDamageTaken ) {
-			this.emit( Action.FIRST_TAKE_DAMAGE, this, hurtAmount );
+			this.emit( Action.FIRST_TAKE_DAMAGE, this, firstAlive, hurtAmount );
 			this.isFirstDamageTaken = false;
 		}
 		return hurtAmount;

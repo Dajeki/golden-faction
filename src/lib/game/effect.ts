@@ -25,15 +25,15 @@ export class Effect {
 	}
 
 	//TODO: Maybe type the event args for each Action?
-	on( event: keyof typeof Action, callback: ( target: Unit )=>void ) {
+	on( event: keyof typeof Action, callback: ( target: Unit, firstAlive?: Unit )=>void ) {
 		this._actions.prependListener( event, callback );
 	}
 
-	once( event: keyof typeof Action, callback: ( target: Unit )=>void ) {
+	once( event: keyof typeof Action, callback: ( target?: Unit, firstAlive?: Unit )=>void ) {
 		this._actions.prependOnceListener( event, callback );
 	}
 
-	emit( event: keyof typeof Action, ...eventInfo: [Unit] ) {
+	emit( event: keyof typeof Action, ...eventInfo: [Unit, Unit?] ) {
 		this._actions.emit( event, ...eventInfo );
 	}
 
@@ -119,12 +119,10 @@ export class Rally extends Effect {
 		this.on( Action.BEFORE_GAME, ( target ) => {
 			rallyHandler( target );
 			this.caster.team?.game?.addBeforeGameStep(
-				this.caster.name,
 				this.caster.uuid,
 				this.name,
 				this.lastAttackChange,
 				Stat.ATTACK,
-				this.caster.name,
 				this.caster.uuid,
 				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
 			);
@@ -133,13 +131,11 @@ export class Rally extends Effect {
 		this.on( Action.END_OF_TURN, ( target ) => {
 			rallyHandler( target );
 			this.caster.team?.game?.addBeforeGameStep(
-				this.caster.name,
 				this.caster.uuid,
 				this.name,
 				this.lastAttackChange,
 				Stat.ATTACK,
 				this.caster.name,
-				this.caster.uuid,
 				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
 			);
 		});
