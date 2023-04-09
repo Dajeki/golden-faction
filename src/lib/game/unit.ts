@@ -1,7 +1,9 @@
-import { UUID } from "bson";
+import { randomUUID } from "node:crypto";
 import EventEmitter from "node:events";
+import { PropertiesOnly } from "../propertiesOnly";
 import { Action } from "./action";
 import { AcidicConcoction, Bramble, Curse, Effect, ExplodingNettle, Headbutt, PoisonFangs, Rally, WebWrap } from "./effect";
+import { Game, GameAction, GameActionStat } from "./game";
 import { Item } from "./item";
 import { Stat, Stats } from "./stats";
 import { Team } from "./team";
@@ -28,7 +30,7 @@ export class Unit {
 		this.stats = new Stats( attack, health, def, crit, dodge, strikes );
 		this.currentHealth = health || 0;
 		this.stats.setOwner( this );
-		this.uuid = crypto.randomUUID();
+		this.uuid = randomUUID();
 
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			this.isFirstAttack = false;
@@ -39,9 +41,9 @@ export class Unit {
 			const effectiveDamage = target.hurt( this.stats.attack, this );
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"attack",
+				GameAction.BASIC_ATTACK,
 				-effectiveDamage,
-				Stat.HEALTH,
+				GameActionStat.CURRENT_HEALTH,
 				target.uuid,
 				`${ this.name } on team ${ this.team?.name } did ${ effectiveDamage } with basic attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 			);
@@ -74,9 +76,9 @@ export class Unit {
 		this.on( Action.DIE, ( target ) => {
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"die",
+				GameAction.DIE,
 				0,
-				Stat.HEALTH,
+				GameActionStat.CURRENT_HEALTH,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } has died.`,
 			);
@@ -125,11 +127,16 @@ export class Unit {
 
 	once( event: Action, callback: ( target:Unit, firstAlive: Unit, damage?:number )=>void ) {
 		this._actions.once( event, callback );
+		return callback;
 		// this._actions.prependOnceListener( event, callback );
 	}
 
+	removeListener( event: Action, callback: ( target:Unit, firstAlive: Unit, damage?:number )=>void ) {
+		this._actions.removeListener( event, callback );
+	}
+
 	emit( event: Action, ...eventInfo: [Unit, Unit?, number?] ) {
-		if( !Action.DIE && this.isDead ) return;
+		if( event !== Action.DIE && this.isDead ) return;
 		//allow item, debuff, and buff to fire start of turn and end of turn if cced
 		if( this.isCrowdControlled ) {
 			if(
@@ -145,10 +152,26 @@ export class Unit {
 
 	addBuff( buff: Effect ) {
 		this.buffs.push( buff );
+		this.team?.game?.addGameStep(
+			buff.caster.uuid,
+			buff.name,
+			buff.duration,
+			GameActionStat.BUFF,
+			this.uuid,
+			`${ this.name } on team ${ this.team?.name } was effected by ${ buff.caster.name } on team ${ buff.caster.team?.name }'s ${ buff.name }`,
+		);
 		buff.emit( Action.ON_ADD, this );
 	}
 	addDebuff( debuff: Effect ) {
 		this.debuffs.push( debuff );
+		this.team?.game?.addGameStep(
+			debuff.caster.uuid,
+			debuff.name,
+			debuff.duration,
+			GameActionStat.DEBUFF,
+			this.uuid,
+			`${ this.name } on team ${ this.team?.name } was effected by ${ debuff.caster.name } on team ${ debuff.caster.team?.name }'s ${ debuff.name }`,
+		);
 		debuff.emit( Action.ON_ADD, this );
 	}
 
@@ -156,19 +179,43 @@ export class Unit {
 		const buffIndex = this.buffs.findIndex(( currentBuff ) => currentBuff === buff );
 		if( buffIndex < 0 ) return;
 		this.buffs.splice( buffIndex, 1 );
+		this.team?.game?.addGameStep(
+			buff.caster.uuid,
+			buff.name,
+			-1,
+			GameActionStat.BUFF,
+			this.uuid,
+			`${ this.name } on team ${ this.team?.name } is no longer effected by ${ buff.caster.name } on team ${ buff.caster.team?.name }'s ${ buff.name }`,
+		);
 		buff.emit( Action.ON_REMOVE, this );
 	}
 	removeDebuff( debuff: Effect ) {
 		const debuffIndex = this.debuffs.findIndex(( currentDebuff ) => currentDebuff === debuff );
 		if( debuffIndex < 0 ) return;
 		this.debuffs.splice( debuffIndex, 1 );
+		this.team?.game?.addGameStep(
+			debuff.caster.uuid,
+			debuff.name,
+			-1,
+			GameActionStat.DEBUFF,
+			this.uuid,
+			`${ this.name } on team ${ this.team?.name } is no longer effected by ${ debuff.caster.name } on team ${ debuff.caster.team?.name }'s ${ debuff.name }`,
+		);
 		debuff.emit( Action.ON_REMOVE, this );
 	}
 
 	resurrect( percent = 1 ) {
 		if( this.isDead ) {
 			this.isDead = false;
-			return this.heal( Math.ceil( this.stats.health*percent ) + Math.abs( this.currentHealth ));
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.RESURRECT,
+				0,
+				GameActionStat.CURRENT_HEALTH,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } was resurrected`,
+			);
+			return this.heal( Math.ceil( this.stats.health*percent ) - Math.abs( this.currentHealth ));
 		}
 		console.log( "Tried to res something that wasnt dead" );
 	}
@@ -195,7 +242,7 @@ export class Unit {
 		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, firstAliveEnemy, amount );
 
 		const wasAlive = this.currentHealth > 0;
-		const hurtAmount = amount - Math.ceil( amount * ( this.stats.def/100 ));
+		const hurtAmount = amount - Math.ceil( amount * ( this.stats.defense/100 ));
 		this.currentHealth -= hurtAmount;
 		attacker.emit( Action.DEALT_DAMAGE, this, firstAliveEnemy, hurtAmount );
 		const isDead = this.currentHealth <= 0;
@@ -213,7 +260,7 @@ export class Unit {
 
 	hurtWithReflect( amount: number, attacker: Unit ) {
 		const wasAlive = this.currentHealth > 0;
-		const hurtAmount = amount - Math.ceil( amount * ( this.stats.def/100 ));
+		const hurtAmount = amount - Math.ceil( amount * ( this.stats.defense/100 ));
 		this.currentHealth -= hurtAmount;
 		const isDead = this.currentHealth <= 0;
 		if( wasAlive && isDead && attacker ) {
@@ -246,6 +293,16 @@ export class Unit {
 		}
 	}
 
+	toJSON() {
+		return {
+			name         : this.name,
+			uuid         : this.uuid,
+			buff         : this.buffs,
+			debuff       : this.debuffs,
+			stats        : this.stats,
+			currentHealth: this.currentHealth,
+		};
+	}
 }
 
 //Tier 1 Units
@@ -275,9 +332,9 @@ export class Acolyte extends Unit {
 
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"healing_flame",
+				GameAction.HEALING_FLAME,
 				effectiveHeal,
-				Stat.HEALTH,
+				GameActionStat.CURRENT_HEALTH,
 				lowestHealthUnit.uuid,
 				`${ this.name } on team ${ this.team?.name } healed ${ lowestHealthUnit.name } on team ${ this.team?.name } for ${ effectiveHeal }`,
 			);
@@ -292,9 +349,9 @@ export class Acolyte extends Unit {
 
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"sanctimonious_flame",
+					GameAction.SANCTIMONIOUS_FLAME,
 					-effectiveSFlame,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					target.uuid,
 					`${ this.name } on team ${ this.team?.name } did ${ effectiveSFlame } with Sanctimonious Flame to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
@@ -350,9 +407,9 @@ export class Rogue extends Unit {
 
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"sneak_attack",
+					GameAction.SNEAK_ATTACK,
 					-effectiveSneak,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					target.uuid,
 					`${ this.name } on team ${ this.team?.name } did ${ effectiveSneak } with Sneak Attack to ${ target.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
@@ -367,9 +424,9 @@ export class Rogue extends Unit {
 
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"backstab",
+					GameAction.BACKSTAB,
 					-effectiveBackstab,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					target.uuid,
 					`${ this.name } on team ${ this.team?.name } did ${ effectiveBackstab } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
@@ -397,26 +454,27 @@ export class Warrior extends Unit {
 
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"cleave",
+					GameAction.CLEAVE,
 					-effectiveCleave,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					targetNeighbor.ahead.uuid,
-					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with cleave to ${ targetNeighbor.ahead.name } on team ${ targetNeighbor.ahead.team?.opposingTeam?.name }`,
 				);
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Cleave to ${ targetNeighbor.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with cleave to ${ targetNeighbor.ahead.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 			if( targetNeighbor?.behind ) {
 				const effectiveCleave = targetNeighbor.behind.hurt( cleaveDamage, this );
+
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"cleave",
+					GameAction.CLEAVE,
 					-effectiveCleave,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					targetNeighbor.behind.uuid,
-					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Backstab to ${ target?.name } on team ${ this.team?.opposingTeam?.name }`,
+					`${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with cleave to ${ targetNeighbor.behind.name } on team ${ this.team?.opposingTeam?.name }`,
 				);
-				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with Cleave to ${ targetNeighbor.behind.name } on team ${ this.team?.opposingTeam?.name }` );
+				console.log( `${ this.name } on team ${ this.team?.name } did ${ effectiveCleave } with cleave to ${ targetNeighbor.behind.name } on team ${ this.team?.opposingTeam?.name }` );
 			}
 
 		});
@@ -442,9 +500,9 @@ export class Alchemist extends Unit {
 				const effectiveHeal = neighbor.ahead.heal( healAmount );
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"healing_mist",
+					GameAction.HEALING_MIST,
 					effectiveHeal,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					neighbor.ahead.uuid,
 					`${ this.name } on team ${ this.team?.name } healed ${ neighbor?.ahead.name } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist`,
 				);
@@ -455,9 +513,9 @@ export class Alchemist extends Unit {
 				const effectiveHeal = neighbor.behind.heal( healAmount );
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"healing_mist",
+					GameAction.HEALING_MIST,
 					effectiveHeal,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					neighbor.behind.uuid,
 					`${ this.name } on team ${ this.team?.name } healed ${ neighbor?.behind.name  } on team ${ this.team?.name } for ${ effectiveHeal } with Healing Mist`,
 				);
@@ -475,9 +533,9 @@ export class Druid extends Unit {
 		//Bramble
 		this.on( Action.BEFORE_ATTACK, ( target ) => {
 			//find and reset bramble on the target
-			const existingBramble = target?.debuffs.find( debuff => debuff.name === "Bramble" );
+			const existingBramble = target?.debuffs.find( debuff => debuff.name === "bramble" );
 			if( existingBramble ) {
-				existingBramble.resetDuration();
+				existingBramble.resetDuration( target );
 				return;
 			}
 
@@ -490,7 +548,7 @@ export class Druid extends Unit {
 		//if added through death, it needs to just transfer the duration with it to the target behind.
 
 		this.on( Action.ATTACK, ( target ) => {
-			const existingExplodingNettle = target.debuffs.find( debuff => debuff.name === "Exploding Nettle" );
+			const existingExplodingNettle = target.debuffs.find( debuff => debuff.name === "explodingNettle" );
 			if( existingExplodingNettle ) {
 				return;
 			}
@@ -515,9 +573,9 @@ export class RavenousDog extends Unit {
 				this.isFrenzied = true;
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"add_frenzy",
+					GameAction.FRENZY,
 					this.frenzyAmount,
-					Stat.ATTACK,
+					GameActionStat.ATTACK,
 					this.uuid,
 					`${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats`,
 				);
@@ -528,9 +586,9 @@ export class RavenousDog extends Unit {
 				this.isFrenzied = false;
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"remove_frenzy",
+					GameAction.FRENZY,
 					-this.frenzyAmount,
-					Stat.ATTACK,
+					GameActionStat.ATTACK,
 					this.uuid,
 					`${ this.name } on team ${ this.team?.name } has taken ${ this.stats.health - this.currentHealth } and only has ${ this.stats.health } gaining Frenzy stats`,
 				);
@@ -542,18 +600,18 @@ export class RavenousDog extends Unit {
 		this.on( Action.KILLED_UNIT, ( target ) => {
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"feeding_frenzy",
+				GameAction.FEEDING_FRENZY,
 				1,
-				Stat.ATTACK,
+				GameActionStat.ATTACK,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } killed ${ target.name } on team ${ this.team?.opposingTeam?.name } and gained +1 attack`,
 			);
 			this.stats.add( Stat.ATTACK, 1 );
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"feeding_frenzy",
+				GameAction.FEEDING_FRENZY,
 				1,
-				Stat.HEALTH,
+				GameActionStat.HEALTH,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } killed ${ target.name } on team ${ this.team?.opposingTeam?.name } and gained +1 health`,
 			);
@@ -575,9 +633,9 @@ export class Shaman extends Unit {
 				const effectiveHealing = teammate.heal( 1 );
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"healing_aura",
+					GameAction.HEALING_AURA,
 					effectiveHealing,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					teammate.uuid,
 					`${ this.name } on team ${ this.team?.name } Healing Aura has healed ${ teammate.name } on team ${ this.team?.name } for ${ effectiveHealing } health.`,
 				);
@@ -593,9 +651,9 @@ export class Shaman extends Unit {
 				this.hasAncestralGuidanced = true;
 				this.team?.game?.addGameStep(
 					this.uuid,
-					"ancestral_guidance",
+					GameAction.ANCESTRAL_GUIDANCE,
 					effectiveHealing || 0,
-					Stat.HEALTH,
+					GameActionStat.CURRENT_HEALTH,
 					teammate.uuid,
 					`${ this.name } on team ${ this.team?.name } resurrected ${ teammate.name } on team ${ this.team?.name } with ${ effectiveHealing }`,
 				);
@@ -617,9 +675,9 @@ export class Watcher extends Unit {
 
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"stare_down",
-				this.stareDownReduc,
-				Stat.ATTACK,
+				GameAction.STARE_DOWN,
+				-this.stareDownReduc,
+				GameActionStat.ATTACK,
 				target.uuid,
 				`${ this.name } on team ${ this.team?.name } used stare down and reduced ${ target?.name } on team ${ this.team?.opposingTeam?.name }'s attack by ${ this.stareDownReduc }`,
 			);
@@ -634,10 +692,10 @@ export class Watcher extends Unit {
 			}
 			this.team?.game?.addGameStep(
 				this.uuid,
-				"visionary_increase",
-				this.stareDownReduc,
-				Stat.ATTACK,
-				target.uuid,
+				GameAction.VISIONARY_INCREASE,
+				-this.stareDownReduc,
+				GameActionStat.ATTACK,
+				unitTwoBehind?.uuid || "",
 				`${ this.name } on team ${ this.team?.name } used stare down and reduced ${ target?.name } on team ${ this.team?.opposingTeam?.name }'s attack by ${ this.stareDownReduc }`,
 			);
 			//Visionary Increase
@@ -663,9 +721,9 @@ export class CorruptedWitch extends Unit {
 
 			if( Math.random() < this.curseChance ) return;
 
-			const existingCurse = target?.debuffs.find( debuff => debuff.name === "Curse" );
+			const existingCurse = target.debuffs.find( debuff => debuff.name === "Curse" );
 			if( existingCurse ) {
-				existingCurse.resetDuration();
+				existingCurse.resetDuration( target );
 				return;
 			}
 
@@ -676,7 +734,15 @@ export class CorruptedWitch extends Unit {
 		this.on( Action.DEALT_DAMAGE, ( target, firstAliveEnemy, amountDone ) => {
 			if( !amountDone ) return;
 			const healAmount = Math.ceil( amountDone * this.feedCoef );
-			this.heal( healAmount );
+			const effectiveHeal = this.heal( healAmount );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.FEED_OFF_SUFFERING,
+				effectiveHeal,
+				GameActionStat.CURRENT_HEALTH,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name }'s feed off suffering healed for ${ healAmount }`,
+			);
 			console.log( `${ this.name } on team ${ this.team?.name }'s feed off suffering healed for ${ healAmount }` );
 		});
 
@@ -695,13 +761,30 @@ export class Mage extends Unit {
 			this.availableFireballRounds++;
 			if( this.availableFireballRounds % this.roundsToFireball ) return;
 
-			console.log( `${ this.name } on team ${ this.team?.name } casted fireball and gained +1 attack` );
 			//Arcane Mastery
 			this.stats.add( Stat.ATTACK, 1 );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.ARCANE_MASTERY,
+				1,
+				GameActionStat.ATTACK,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } casted fireball and gained +1 attack`,
+			);
+			console.log( `${ this.name } on team ${ this.team?.name } casted fireball and gained +1 attack` );
 
 			target.team?.units.forEach(( enemy ) => {
 				if( enemy.isDead ) return;
 				const fireballDamage = enemy.hurt( Math.ceil( this.stats.attack * this.fireballCoef ), this );
+
+				this.team?.game?.addGameStep(
+					this.uuid,
+					GameAction.FIREBALL,
+					-fireballDamage,
+					GameActionStat.CURRENT_HEALTH,
+					enemy.uuid,
+					`${ this.name } on team ${ this.team?.name } hit ${ enemy.name } on team ${ enemy.team?.name } for ${ fireballDamage } with fireball`,
+				);
 				console.log( `${ this.name } on team ${ this.team?.name } hit ${ enemy.name } on team ${ enemy.team?.name } for ${ fireballDamage } with fireball` );
 			});
 		});
@@ -716,8 +799,26 @@ export class Minotaur extends Unit {
 		this.on( Action.FIRST_ATTACK, ( target ) => {
 			target.team?.removeUnit( target );
 			target.team?.addUnitEnd( target );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.TRAMPLE,
+				( target.team?.units?.length || 0 ) - 1,
+				GameActionStat.POSITION,
+				target.uuid,
+				`${ this.name } on team ${ this.team?.name } moved ${ target.name } on team ${ target.team?.name } to the end of the line`,
+			);
+			console.log( `${ this.name } on team ${ this.team?.name } moved ${ target.name } on team ${ target.team?.name } to the end of the line` );
 
+			//REFACTOR make this an actual buff effect?
 			this.once( Action.AFTER_ATTACK, ( target ) => {
+				this.team?.game?.addGameStep(
+					this.uuid,
+					GameAction.HEADBUTT,
+					1,
+					GameActionStat.BUFF,
+					this.uuid,
+					`${ this.name } on team ${ this.team?.name } is ready to headbutt`,
+				);
 				this.headbuttStun = true;
 			});
 		});
@@ -725,6 +826,15 @@ export class Minotaur extends Unit {
 		this.on( Action.ATTACK, ( target ) => {
 			if( this.headbuttStun ) {
 				target.addDebuff( new Headbutt( this ));
+				this.team?.game?.addGameStep(
+					this.uuid,
+					GameAction.HEADBUTT,
+					-1,
+					GameActionStat.BUFF,
+					this.uuid,
+					`${ this.name } on team ${ this.team?.name } is no longer ready to headbutt`,
+				);
+				this.headbuttStun = false;
 			}
 		});
 
@@ -741,9 +851,16 @@ export class Paladin extends Unit {
 
 		//Divine Recoil
 		this.on( Action.AFTER_TAKE_DAMAGE, ( attacker, _, damage = 0 ) => {
-			attacker.hurtWithReflect( Math.ceil( damage * this.recoilCoef ), this );
-
-			console.log( `${ this.name } on team ${ this.team?.name } reflected back damage to ${ attacker.name } on team ${ attacker.team?.name } for ${ Math.ceil( damage * this.recoilCoef ) }` );
+			const effectiveReflect = attacker.hurtWithReflect( Math.ceil( damage * this.recoilCoef ), this );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.DIVINE_RECOIL,
+				-effectiveReflect,
+				GameActionStat.CURRENT_HEALTH,
+				attacker.uuid,
+				`${ this.name } on team ${ this.team?.name } reflected back damage to ${ attacker.name } on team ${ attacker.team?.name } for ${ effectiveReflect }`,
+			);
+			console.log( `${ this.name } on team ${ this.team?.name } reflected back damage to ${ attacker.name } on team ${ attacker.team?.name } for ${ effectiveReflect }` );
 		});
 
 		//Holy Shield
@@ -753,12 +870,28 @@ export class Paladin extends Unit {
 			this.availableReduceRound++;
 			if( this.availableReduceRound % this.roundsToReduce ) {
 				this.stats.add( Stat.DEF, this.reduceCoef );
+				this.team?.game?.addGameStep(
+					this.uuid,
+					GameAction.HOLY_SHIELD,
+					this.reduceCoef,
+					GameActionStat.DEF,
+					this.uuid,
+					`${ this.name } defense increased ${ this.reduceCoef } with holy shield`,
+				);
 				console.log( `${ this.name } defense increased ${ this.reduceCoef } with holy shield` );
 
 				return;
 			}
 
 			this.stats.subtract( Stat.DEF, this.reduceCoef, this );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.HOLY_SHIELD,
+				-this.reduceCoef,
+				GameActionStat.DEF,
+				this.uuid,
+				`${ this.name } lost holy shield and defense decreased by ${ this.reduceCoef }`,
+			);
 			console.log( `${ this.name } lost holy shield and defense decreased by ${ this.reduceCoef }` );
 		});
 	}
@@ -768,6 +901,7 @@ export class Paladin extends Unit {
 
 export class OrcWarrior extends Unit {
 	origStatObj = this.stats;
+	bloodlustIncrease = 2;
 	constructor() {
 		super( "🪓 Orc Warrior", 7, 10 );
 
@@ -776,20 +910,53 @@ export class OrcWarrior extends Unit {
 			const teammatesAround = this.team?.getAliveUnitAroundTarget( this );
 			teammatesAround?.behind?.stats.add( Stat.ATTACK, 2 );
 			this.stats.add( Stat.ATTACK, 2 );
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.BLOODLUST,
+				this.bloodlustIncrease,
+				GameActionStat.ATTACK,
+				this.uuid,
+				`${ this.name } on team ${ this.team?.name } gain +2 attack from killing ${ this.name } on team ${ this.team?.name }`,
+			);
+			this.team?.game?.addGameStep(
+				this.uuid,
+				GameAction.BLOODLUST,
+				this.bloodlustIncrease,
+				GameActionStat.ATTACK,
+				teammatesAround?.behind?.uuid || "",
+				`${ teammatesAround?.behind?.name } on team ${ this.team?.name } gain +2 attack from ${ this.name } on team ${ this.team?.name } killing ${ this.name } on team ${ this.team?.name }`,
+			);
+
 			console.log( `${ this.name } on team ${ this.team?.name } and ${ teammatesAround?.behind?.name } on team ${ this.team?.name } gain +2 attack from ${ this.name } on team ${ this.team?.name }` );
 		});
 
 
 		//Overpower
 		const origSubtract = this.stats.subtract;
-		this.stats.subtract = function ( stat: Stat, amount: number, unitModifying: Unit ) {
-			if( stat === Stat.ATTACK ) {
-				if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
+		this.stats.subtract = function ( stat: keyof PropertiesOnly<Stats>, amount: number, unitModifying: Unit ) {
 
-					this.add( Stat.ATTACK, 2 );
-					console.log( `${ this.owner?.name } on team ${ this.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
-				}
+			if( stat === Stat.ATTACK && unitModifying && amount >= 0 ) {
+
+				this.add( Stat.ATTACK, 2 );
+				this.owner?.team?.game?.addGameStep(
+					this.owner?.uuid,
+					GameAction.OVERPOWER,
+					2,
+					GameActionStat.ATTACK,
+					this.owner?.uuid,
+					`${ this.owner?.name } on team ${ this.owner?.team?.name } gain +2 attack because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.`,
+				);
+				this.owner?.team?.game?.addGameStep(
+					this.owner?.uuid,
+					GameAction.OVERPOWER,
+					2,
+					GameActionStat.HEALTH,
+					this.owner?.uuid,
+					`${ this.owner?.name } on team ${ this.owner?.team?.name } gain +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.`,
+				);
+				console.log( `${ this.owner?.name } on team ${ this.owner?.team?.name } gain +2 attack and +2 health because ${ unitModifying.name } on team ${ unitModifying.team?.name } reduced its attack.` );
 			}
+
 			origSubtract.call( this, stat, amount, unitModifying );
 		};
 	}
@@ -808,11 +975,11 @@ export class TimeKeeper extends Unit {
 			this.availableTimeWarpRounds++;
 			if( this.availableTimeWarpRounds % this.roundsToTimeWarp ) return;
 
-			this.team?.game?.addBeforeGameStep(
+			this.team?.game?.addGameStep(
 				this.uuid,
-				"time_warp",
+				GameAction.TIME_WARP,
 				1,
-				"strikes",
+				GameActionStat.STRIKES,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } has warped time attacking again this turn`,
 			);
@@ -826,9 +993,9 @@ export class TimeKeeper extends Unit {
 
 			this.team?.game?.addBeforeGameStep(
 				this.uuid,
-				"temporal_shield",
+				GameAction.TEMPORAL_SHIELD,
 				this.temporalShield,
-				"shield",
+				GameActionStat.SHIELD,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name } has gained a temporal shield for ${ this.temporalShield }`,
 			);
@@ -839,11 +1006,11 @@ export class TimeKeeper extends Unit {
 			const temporalShieldGain =  Math.ceil( this.stats.health * .1 );
 			this.temporalShield += temporalShieldGain;
 
-			this.team?.game?.addBeforeGameStep(
+			this.team?.game?.addGameStep(
 				this.uuid,
-				"temporal_shield",
+				GameAction.TEMPORAL_SHIELD,
 				temporalShieldGain,
-				"shield",
+				GameActionStat.SHIELD,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name }'s temporal shield gained ${ temporalShieldGain }`,
 			);
@@ -860,16 +1027,16 @@ export class TimeKeeper extends Unit {
 		this.emit( Action.BEFORE_TAKE_DAMAGE, attacker, firstAlive, amount );
 
 		const wasAlive = this.currentHealth > 0;
-		let hurtAmount = amount - Math.ceil( amount * ( this.stats.def / 100 ));
+		let hurtAmount = amount - Math.ceil( amount * ( this.stats.defense / 100 ));
 
 		const overHit = this.temporalShield - hurtAmount;
 		if( overHit < 0 ) {
 
-			this.team?.game?.addBeforeGameStep(
+			this.team?.game?.addGameStep(
 				this.uuid,
-				"temporal_shield",
+				GameAction.TEMPORAL_SHIELD,
 				-this.temporalShield,
-				"shield",
+				GameActionStat.SHIELD,
 				this.uuid,
 				`${ this.name }'s on team ${ this.team?.name }'s temporal shield blocked ${ this.temporalShield } and had the rest taken as health`,
 			);
@@ -883,11 +1050,11 @@ export class TimeKeeper extends Unit {
 
 		}
 		else {
-			this.team?.game?.addBeforeGameStep(
+			this.team?.game?.addGameStep(
 				this.uuid,
-				"temporal_shield",
+				GameAction.TEMPORAL_SHIELD,
 				-this.temporalShield,
-				"shield",
+				GameActionStat.SHIELD,
 				this.uuid,
 				`${ this.name } on team ${ this.team?.name }'s temporal shield blocked ${ hurtAmount }`,
 			);

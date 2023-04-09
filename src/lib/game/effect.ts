@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { Action } from "./action";
+import { GameActionStat } from "./game";
 import { Stat } from "./stats";
 import { Unit } from "./unit";
 
@@ -39,7 +40,15 @@ export class Effect {
 
 	handleDuration( target: Unit ) {
 		this.duration -= 1;
-		if( this.duration === 0 ) {
+		target.team?.game?.addGameStep(
+			this.caster.uuid,
+			this.name,
+			-1,
+			GameActionStat.DURATION,
+			target.uuid,
+			`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } duration on ${ target.name } on team ${ target.team?.name } reduced by 1`,
+		);
+		if( this.duration <= 0 ) {
 			this.once( Action.END_OF_TURN, () => {
 				target.removeDebuff( this );
 			});
@@ -49,8 +58,25 @@ export class Effect {
 		return true;
 	}
 
-	resetDuration() {
+	resetDuration( target: Unit ) {
 		this.duration = this.startDuration;
+		this.caster.team?.game?.addGameStep(
+			this.caster.uuid,
+			this.name,
+			this.startDuration,
+			GameActionStat.DURATION,
+			target.uuid,
+			`${ this.caster.name } on team ${ this.caster.team?.name } ${ this.name } reset on ${ target.name } on team ${ target.team?.name }`,
+		);
+	}
+
+	toJSON() {
+		return {
+			name             : this.name,
+			caster           : this.caster.uuid,
+			remainingDuration: this.duration,
+			startDuration    : this.startDuration,
+		};
 	}
 }
 
@@ -58,22 +84,37 @@ export class PoisonFangs extends Effect {
 	coef = .5;
 
 	constructor( caster: Unit ) {
-		super( "Poison Fang", caster, 2 );
+		super( "poisonFang", caster, 2 );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
 			this.handleDuration( target );
-			target.stats.subtract( Stat.HEALTH, Math.ceil( caster.stats.attack * this.coef ), this.caster );
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name } did ${ 1 } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }` );
-
+			const poisonFangDamage = target.hurt( Math.ceil( caster.stats.attack * this.coef ), this.caster );
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				poisonFangDamage,
+				GameActionStat.CURRENT_HEALTH,
+				target.uuid,
+				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } did ${ poisonFangDamage } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }`,
+			);
+			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } did ${ poisonFangDamage } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }` );
 		});
 	}
 }
 
 export class WebWrap extends Effect {
 	constructor( caster: Unit ) {
-		super( "Web Wrap", caster, 3 );
+		super( "webWrap", caster, 3 );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
+			target.team?.game?.addGameStep(
+				caster.uuid,
+				this.name,
+				1,
+				GameActionStat.CONTROL,
+				target.uuid,
+				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } crowd controlled ${ target.name } on ${ target.team?.name }`,
+			);
 			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } crowd controlled ${ target.name }` );
 
 			target.isCrowdControlled = true;
@@ -83,6 +124,14 @@ export class WebWrap extends Effect {
 				//need to wait till end of turn to remove else attack and other stuff will end up firing still.
 				//Events only have start of turn and end of turn logic for when you can remove cc for now.
 				this.once( Action.END_OF_TURN, () => {
+					target.team?.game?.addGameStep(
+						caster.uuid,
+						this.name,
+						-1,
+						GameActionStat.CONTROL,
+						target.uuid,
+						`${ target.name } on ${ target.team?.name } is no longer crowd controlled by ${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } `,
+					);
 					target.isCrowdControlled = false;
 				});
 				return;
@@ -97,7 +146,7 @@ export class Rally extends Effect {
 	rallyCoef = .3;
 	lastAttackChange = 0;
 	constructor( caster: Unit ) {
-		super( "Rally", caster );
+		super( "rally", caster );
 
 		const rallyHandler = ( target: Unit ) => {
 			if( !this.caster.team || target.isDead ) return;
@@ -113,7 +162,7 @@ export class Rally extends Effect {
 			this.lastNumberOfWarriors = numberOfWarriors;
 			this.caster.stats.subtract( Stat.ATTACK, Math.round( warriorDIfference * caster.stats.attack * this.rallyCoef ));
 			this.lastAttackChange = warriorDIfference * -1;
-			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ warriorDIfference * -1 }` );
+
 		};
 
 		this.on( Action.BEFORE_GAME, ( target ) => {
@@ -122,7 +171,7 @@ export class Rally extends Effect {
 				this.caster.uuid,
 				this.name,
 				this.lastAttackChange,
-				Stat.ATTACK,
+				GameActionStat.ATTACK,
 				this.caster.uuid,
 				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
 			);
@@ -130,12 +179,12 @@ export class Rally extends Effect {
 		//Repeat process on the end of every turn.
 		this.on( Action.END_OF_TURN, ( target ) => {
 			rallyHandler( target );
-			this.caster.team?.game?.addBeforeGameStep(
+			this.caster.team?.game?.addGameStep(
 				this.caster.uuid,
 				this.name,
 				this.lastAttackChange,
-				Stat.ATTACK,
-				this.caster.name,
+				GameActionStat.ATTACK,
+				this.caster.uuid,
 				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } changed Attack ${ this.lastAttackChange }`,
 			);
 		});
@@ -146,12 +195,20 @@ export class AcidicConcoction extends Effect {
 	coef = 1.2;
 
 	constructor( caster: Unit ) {
-		super( "Acidic Concoction", caster, 1 );
+		super( "acidicConcoction", caster, 1 );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
 			this.handleDuration( target );
-			target.hurt( Math.ceil( caster.stats.attack * this.coef ), this.caster );
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name } did ${ 1 } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }` );
+			const acidConDamage = target.hurt( Math.ceil( caster.stats.attack * this.coef ), this.caster );
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				acidConDamage,
+				GameActionStat.CURRENT_HEALTH,
+				target.uuid,
+				`${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } did ${ acidConDamage } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }`,
+			);
+			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } did ${ acidConDamage } damage with ${ this.name } to ${ target.name } on team ${ target.team?.name }` );
 
 		});
 	}
@@ -159,45 +216,79 @@ export class AcidicConcoction extends Effect {
 
 export class Bramble extends Effect {
 	brambleCoef = .2;
-	startBrambleReduc = 0;
+	brambleReduc = 0;
 
 	constructor( caster: Unit ) {
-		super( "Bramble", caster, 2 );
+		super( "bramble", caster, 2 );
 
 
 		this.on( Action.ON_ADD, ( target ) => {
-			this.startBrambleReduc = Math.ceil( target.stats.attack * this.brambleCoef );
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } reduced ${ target.name } on team ${ target.team?.name }'s attack by ${ this.startBrambleReduc }` );
-			target.stats.subtract( Stat.ATTACK, this.startBrambleReduc );
+			this.brambleReduc = Math.ceil( target.stats.attack * this.brambleCoef );
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				-this.brambleReduc,
+				GameActionStat.ATTACK,
+				target.uuid,
+				`${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } reduced ${ target.name } on team ${ target.team?.name }'s attack by ${ this.brambleReduc }`,
+			);
+			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } reduced ${ target.name } on team ${ target.team?.name }'s attack by ${ this.brambleReduc }` );
+			target.stats.subtract( Stat.ATTACK, this.brambleReduc );
 		});
 
 		this.on( Action.START_OF_TURN, ( target ) => {
+			const brambleAttackChange = Math.ceil( target.stats.attack * this.brambleCoef ) - this.brambleReduc;
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				-brambleAttackChange,
+				GameActionStat.ATTACK,
+				target.uuid,
+				`${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } reduced ${ target.name } on team ${ target.team?.name }'s attack by ${ this.brambleReduc }`,
+			);
+
+			target.stats.subtract( Stat.ATTACK, brambleAttackChange );
 			this.handleDuration( target );
 		});
 
 		this.on( Action.ON_REMOVE, ( target ) => {
-			target.stats.add( Stat.ATTACK, this.startBrambleReduc );
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } removed from ${ target.name } on team ${ target.team?.name }'s so attack incresed by ${ this.startBrambleReduc }` );
+			target.stats.add( Stat.ATTACK, this.brambleReduc );
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				this.brambleReduc,
+				GameActionStat.ATTACK,
+				target.uuid,
+				`${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } removed from ${ target.name } on team ${ target.team?.name }'s so attack incresed by ${ this.brambleReduc }`,
+			);
+			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } removed from ${ target.name } on team ${ target.team?.name }'s so attack incresed by ${ this.brambleReduc }` );
 		});
 	}
 }
 
 export class ExplodingNettle extends Effect {
 	nettleCoef = .6;
+	lastDieEvent?: ( target: Unit, firstAlive: Unit, damage?: number ) => void;
 
 	constructor( caster: Unit ) {
-		super( "Exploding Nettle", caster, 3 );
+		super( "explodingNettle", caster, 3 );
 
 		this.on( Action.ON_ADD, ( target ) => {
 			//die event gets the first alive enemy unit
-			target.once( Action.DIE, ( EnemyTarget ) => {
-				console.log( "Fired Exploding Nettle from Death" );
+			this.lastDieEvent = target.once( Action.DIE, ( EnemyTarget ) => {
 				const unitsAround = target.team?.getAliveUnitAroundTarget( target );
-				unitsAround?.behind?.addDebuff( new ExplodingNettle( caster ));
+				unitsAround?.behind?.addDebuff( this );
+				target.removeDebuff( this );
+				this.caster.team?.game?.addGameStep(
+					target.uuid,
+					this.name,
+					0,
+					GameActionStat.CURRENT_HEALTH,
+					unitsAround?.behind?.uuid || "",
+					`${ target.name } died so ${ this.name } moved to ${ unitsAround?.behind?.name } with duration ${ this.duration }`,
+				);
 				console.log( `${ target.name } died so ${ this.name } moved to ${ unitsAround?.behind?.name } with duration ${ this.duration }` );
 			});
-
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } infected ${ target.name } on team ${ target.team?.name }` );
 		});
 
 		this.on( Action.START_OF_TURN, ( target ) => {
@@ -205,11 +296,25 @@ export class ExplodingNettle extends Effect {
 		});
 
 		this.on( Action.ON_REMOVE, ( target ) => {
+
+			//check to see if the duration is getting transfered or creating a new one.
+			if( !this.lastDieEvent || this.duration > 0 ) return;
+			//remove the old die listener so they dont start stacking....
+			target.removeListener( Action.DIE, this.lastDieEvent );
+
 			const nettleDamage = Math.ceil( caster.stats.attack * this.nettleCoef );
-			target.hurt( nettleDamage, this.caster );
+			const effectiveNettleDamage = target.hurt( nettleDamage, this.caster );
 			const unitsAround = target.team?.getAliveUnitAroundTarget( target );
 			unitsAround?.behind?.addDebuff( new ExplodingNettle( caster ));
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } exploded dealing ${ nettleDamage } to ${ target.name } on team ${ target.team?.name } so it moved to ${ unitsAround?.behind?.name } and reset its duration.` );
+			this.caster.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				effectiveNettleDamage,
+				GameActionStat.CURRENT_HEALTH,
+				target.uuid,
+				`${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } exploded dealing ${ nettleDamage } to ${ target.name } on team ${ target.team?.name }`,
+			);
+			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } exploded dealing ${ nettleDamage } to ${ target.name } on team ${ target.team?.name }` );
 		});
 	}
 }
@@ -219,14 +324,21 @@ export class Curse extends Effect {
 	reduction = 0;
 
 	constructor( caster: Unit ) {
-		super( "Curse", caster, 3 );
+		super( "curse", caster, 3 );
 
 		this.on( Action.ON_ADD, ( target ) => {
 
 			this.reduction = Math.ceil( target.stats.attack * this.curseCoef );
-			//die event gets the first alive enemy unit
 			target.stats.subtract( Stat.ATTACK, this.reduction, this.caster );
-			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } infected ${ target.name } on team ${ target.team?.name } reducing attack by ${ this.reduction }` );
+			target.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				-this.reduction,
+				GameActionStat.ATTACK,
+				target.uuid,
+				`${ this.caster.name } on team ${ caster.team?.opposingTeam?.name }'s ${ this.name } infected ${ target.name } on team ${ target.team?.name } reducing attack by ${ this.reduction }`,
+			);
+			console.log( `${ this.caster.name } on team ${ caster.team?.opposingTeam?.name }'s ${ this.name } infected ${ target.name } on team ${ target.team?.name } reducing attack by ${ this.reduction }` );
 		});
 
 		this.on( Action.START_OF_TURN, ( target ) => {
@@ -235,6 +347,14 @@ export class Curse extends Effect {
 
 		this.on( Action.ON_REMOVE, ( target ) => {
 			target.stats.add( Stat.ATTACK, this.reduction );
+			target.team?.game?.addGameStep(
+				this.caster.uuid,
+				this.name,
+				this.reduction,
+				GameActionStat.ATTACK,
+				target.uuid,
+				`${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } expired from ${ target.name } on team ${ target.team?.name } and ${ this.reduction } attack was returned`,
+			);
 			console.log( `${ this.caster.name } on team ${ target.team?.opposingTeam?.name }'s ${ this.name } expired from ${ target.name } on team ${ target.team?.name } and ${ this.reduction } attack was returned` );
 		});
 	}
@@ -242,22 +362,36 @@ export class Curse extends Effect {
 
 export class Headbutt extends Effect {
 	constructor( caster: Unit ) {
-		super( "Head Butt", caster, 1 );
+		super( "headbutt", caster, 1 );
 
 		this.on( Action.START_OF_TURN, ( target ) => {
-			console.log( `${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } crowd controlled ${ target.name }` );
+			target.team?.game?.addGameStep(
+				caster.uuid,
+				this.name,
+				1,
+				GameActionStat.CONTROL,
+				target.uuid,
+				`${ caster.name } on team ${ caster.team?.name } stunned ${ target.name } on team ${ target.team?.name } with headbutt`,
+			);
+			console.log( `${ caster.name } on team ${ caster.team?.name } stunned ${ target.name } on team ${ target.team?.name } with headbutt` );
 
 			target.isCrowdControlled = true;
 
 			const isStillRunning = this.handleDuration( target );
-			if( !isStillRunning ) {
-				//need to wait till end of turn to remove else attack and other stuff will end up firing still.
-				//Events only have start of turn and end of turn logic for when you can remove cc for now.
-				this.once( Action.END_OF_TURN, () => {
-					target.isCrowdControlled = false;
-				});
-				return;
-			}
+			if( isStillRunning ) return;
+			//need to wait till end of turn to remove else attack and other stuff will end up firing still.
+			//Events only have start of turn and end of turn logic for when you can remove cc for now.
+			this.once( Action.END_OF_TURN, () => {
+				target.isCrowdControlled = false;
+				target.team?.game?.addGameStep(
+					caster.uuid,
+					this.name,
+					-1,
+					GameActionStat.CONTROL,
+					target.uuid,
+					`${ target.name } on ${ target.team?.name } is no longer crowd controlled by ${ this.caster.name } on team ${ this.caster.team?.name }'s ${ this.name } `,
+				);
+			});
 		});
 	}
 }

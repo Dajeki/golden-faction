@@ -1,19 +1,65 @@
 import { Action } from "./action";
-import { Stat } from "./stats";
 import { Team } from "./team";
 
-export interface GameAction {
+export enum GameAction {
+	BASIC_ATTACK = "basicAttack",
+	RESURRECT = "res",
+	DIE = "die",
+	KILLED_UNIT = "killedUnit",
+	HEALING_FLAME = "healingFlame",
+	SANCTIMONIOUS_FLAME = "sanctimoniousFlame",
+	SNEAK_ATTACK = "sneakAttack",
+	BACKSTAB = "backstab",
+	CLEAVE = "cleave",
+	HEALING_MIST = "healingMist",
+	FRENZY = "frenzy",
+	FEEDING_FRENZY = "feedingFrenzy",
+	HEALING_AURA = "healingAura",
+	ANCESTRAL_GUIDANCE = "ancestralGuidance",
+	STARE_DOWN = "stareDown",
+	VISIONARY_INCREASE = "visionaryIncrease",
+	FEED_OFF_SUFFERING = "feedSuffering",
+	FIREBALL = "fireball",
+	ARCANE_MASTERY = "arcaneMastery",
+	TRAMPLE = "trample",
+	HEADBUTT = "headbutt",
+	DIVINE_RECOIL = "divineRecoil",
+	HOLY_SHIELD = "holyShield",
+	BLOODLUST = "bloodlust",
+	OVERPOWER = "overpower",
+	TIME_WARP = "timeWarp",
+	TEMPORAL_SHIELD = "temporalShield",
+}
+export enum GameActionStat {
+	CURRENT_HEALTH = "currentHealth",
+	ATTACK = "attack",
+	HEALTH = "health",
+	CRITICAL = "critical",
+	DODGE = "dodge",
+	DEF = "defense",
+	STRIKES = "strikes",
+	SHIELD = "shield",
+	POSITION = "position",
+	BUFF = "buff",
+	DEBUFF = "debuff",
+	DURATION = "duration",
+	CONTROL = "cc",
+}
+
+export interface GameStep {
 	uuid: string;
 	action: {
-		name: string;
+		name: GameAction;
 		amount: number;
-		stat: string;
+		stat: GameActionStat;
 	};
 	target: {
 		uuid: string;
 	},
 	text: string;
 }
+
+
 
 export class Game {
 	#round = 0;
@@ -27,9 +73,9 @@ export class Game {
 			loser : null,
 		};
 
-	beforeGameStep: GameAction[] = [];
+	beforeGameSteps: GameStep[] = [];
 	//first index is the turn second index is the action the units take
-	gameSteps: GameAction[][] = [];
+	gameSteps: GameStep[][] = [];
 
 	constructor( teamOne: Team, teamTwo: Team, round: number ) {
 		this.#teamOne = teamOne;
@@ -40,21 +86,27 @@ export class Game {
 
 		this.run();
 	}
+	get teamOne() {
+		return this.#teamOne;
+	}
+	get teamTwo() {
+		return this.#teamTwo;
+	}
 
 	addBeforeGameStep(
 		uuid: string,
-		actionName: string,
+		actionName: GameAction,
 		actionAmount: number,
-		actionStat: string,
+		actionEffect: GameActionStat,
 		targetUuid: string,
 		text: string,
 	) {
-		this.beforeGameStep.push({
+		this.beforeGameSteps.push({
 			uuid,
 			action: {
 				name  : actionName,
 				amount: actionAmount,
-				stat  : actionStat,
+				stat  : actionEffect,
 			},
 			target: {
 				uuid: targetUuid,
@@ -65,9 +117,9 @@ export class Game {
 
 	addGameStep(
 		uuid: string,
-		actionName: string,
+		actionName: GameAction,
 		actionAmount: number,
-		actionStat: string,
+		actionEffect: GameActionStat,
 		targetUuid: string,
 		text: string,
 	) {
@@ -77,7 +129,7 @@ export class Game {
 			action: {
 				name  : actionName,
 				amount: actionAmount,
-				stat  : actionStat,
+				stat  : actionEffect,
 			},
 			target: {
 				uuid: targetUuid,
@@ -88,10 +140,6 @@ export class Game {
 
 	get round() {
 		return this.#round;
-	}
-
-	isAppropriateRound( everyXTurns: number ) {
-		return Boolean( !( this.round % everyXTurns ));
 	}
 
 	run() {
@@ -116,7 +164,7 @@ export class Game {
 		// eslint-disable-next-line no-constant-condition
 		while( true && this.#round <= 600 ) {
 			console.log( `START OF ROUND: ${ this.#round }` );
-			this.gameSteps.push( [] as GameAction[] );
+			this.gameSteps.push( [] as GameStep[] );
 			this.#round++;
 
 			this.#teamOne.units.forEach(( unit, indx ) => {
@@ -166,9 +214,9 @@ export class Game {
 
 					this.addGameStep(
 						unit.killer?.uuid || "",
-						Action.KILLED_UNIT,
+						GameAction.KILLED_UNIT,
 						0,
-						Stat.HEALTH,
+						GameActionStat.HEALTH,
 						unit.uuid,
 						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
 					);
@@ -182,9 +230,9 @@ export class Game {
 					unit.emit( Action.DIE, firstAliveTeamOne! );
 					this.addGameStep(
 						unit.killer?.uuid || "",
-						Action.KILLED_UNIT,
+						GameAction.KILLED_UNIT,
 						0,
-						Stat.HEALTH,
+						GameActionStat.HEALTH,
 						unit.uuid,
 						`${ unit.killer?.name } on team ${ unit.killer?.team?.name } killed ${ unit.name } on team ${ unit.team?.name }`,
 					);

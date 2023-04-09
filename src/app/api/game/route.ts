@@ -22,5 +22,11 @@ export async function GET( req: NextRequest ) {
 	console.log( `The losing is ${ game.outcome.loser }` );
 
 	stopLogging();
-	return NextResponse.json({ winner: game.outcome.winner?.toString(), loser: game.outcome.loser?.toString() });
+	// return NextResponse.json({ winner: game.outcome.winner?.toString(), loser: game.outcome.loser?.toString() });
+	return NextResponse.json({
+		outcome        : game.outcome,
+		teams          : [teamOne, teamTwo],
+		beforeGameSteps: game.beforeGameSteps,
+		gameSteps      : game.gameSteps,
+	});
 }

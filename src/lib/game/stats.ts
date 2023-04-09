@@ -5,9 +5,9 @@ import { Unit } from "./unit";
 export enum Stat {
 	HEALTH = "health",
 	ATTACK = "attack",
-	CRITICAL = "crit",
+	CRITICAL = "critical",
 	DODGE = "dodge",
-	DEF = "def",
+	DEF = "defense",
 	STRIKES = "strikes"
 }
 export class Stats {
@@ -17,7 +17,7 @@ export class Stats {
 	#attack: number;
 	#crit: number;
 	#dodge: number;
-	#def: number;
+	#defense: number;
 	#strikes: number;
 	owner?: Unit;
 
@@ -33,8 +33,8 @@ export class Stats {
 	get dodge() {
 		return this.#dodge;
 	}
-	get def() {
-		return this.#def;
+	get defense() {
+		return this.#defense;
 	}
 	get strikes() {
 		return this.#strikes;
@@ -43,7 +43,7 @@ export class Stats {
 	constructor( attack = 1, health = 1, def = 0, crit = 0, dodge = 0, strikes = 1 ) {
 		this.#attack = attack;
 		this.#health = health;
-		this.#def = def;
+		this.#defense = def;
 		this.#crit = crit;
 		this.#dodge = dodge;
 		this.#strikes = strikes;
@@ -70,8 +70,8 @@ export class Stats {
 			this.owner?.heal( amount );
 			break;
 		}
-		case "def":
-			this.#def += amount;
+		case "defense":
+			this.#defense += amount;
 			break;
 		case "crit":
 			this.#crit += amount;
@@ -100,8 +100,8 @@ export class Stats {
 			this.#health -= amount;
 			this.owner?.hurt( amount, unitModifying );
 			break;
-		case "def":
-			this.#def -= amount;
+		case "defense":
+			this.#defense -= amount;
 			break;
 		case "crit":
 			this.#crit -= amount;
@@ -113,5 +113,16 @@ export class Stats {
 			this.#strikes -= amount;
 			break;
 		}
+	}
+
+	toJSON() {
+		return {
+			health: this.#health,
+			attack: this.#attack,
+			crit  : this.#crit,
+			dodge : this.#dodge,
+			def   : this.#defense,
+			strike: this.#strikes,
+		};
 	}
 }

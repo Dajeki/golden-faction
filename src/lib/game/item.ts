@@ -24,11 +24,11 @@ export class Item {
 		});
 	}
 
-	on( event: keyof typeof Action, callback: ( unit?:Unit, firstAlive?: Unit )=>void ) {
+	on( event: Action, callback: ( unit?:Unit, firstAlive?: Unit )=>void ) {
 		this._actions.prependListener( event, callback );
 	}
 
-	emit( event: keyof typeof Action, ...eventInfo: [Unit, Unit?] ) {
+	emit( event: Action, ...eventInfo: [Unit, Unit?] ) {
 		this._actions.emit( event, ...eventInfo );
 	}
 

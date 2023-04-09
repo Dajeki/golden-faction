@@ -14,7 +14,6 @@ export async function POST( req: NextRequest ) {
 	if( !process.env.DB_USER_COLLECTION ) {
 		throw new Error( "Need to declare DB_USER_COLLECTION env variable" );
 	}
-	//Getting email and password from body
 	// eslint-disable-next-line prefer-const
 	let { email, password, username }: signupRequestBody = await req.json();
 
